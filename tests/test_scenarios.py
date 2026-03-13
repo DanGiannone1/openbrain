@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from openbrain.services.document_service import (
     query_documents,
+    raw_query_documents,
     read_document,
     search_documents,
     update_document,
@@ -130,3 +131,96 @@ def test_memory_search_and_user_settings_scenario(_mock_query_embed, _mock_gener
         assert search_results["total"] == 1
         assert search_results["results"][0]["id"] == memory["id"]
         assert search_results["results"][0]["contextTags"] == ["personal", "home", "network"]
+
+
+@patch("openbrain.services.document_service.generate_embedding", return_value=[0.2, 0.3, 0.4])
+@patch("openbrain.embedding.embed_text", return_value=[0.2, 0.3, 0.4])
+def test_multi_user_partition_isolation_scenario(_mock_query_embed, _mock_generate_embedding):
+    backend = FakeCosmosBackend()
+
+    with patch("openbrain.services.document_service.cosmos_client", backend):
+        first = write_document(
+            "user-a@example.com",
+            {
+                "docType": "memory",
+                "narrative": "User A garage code is 1234",
+                "contextTags": ["personal"],
+            },
+        )
+        second = write_document(
+            "user-b@example.com",
+            {
+                "docType": "memory",
+                "narrative": "User B mailbox is slot 44",
+                "contextTags": ["personal"],
+            },
+        )
+
+        user_a_query = query_documents("user-a@example.com", "memory", limit=10)
+        user_b_query = query_documents("user-b@example.com", "memory", limit=10)
+        user_a_search = search_documents("user-a@example.com", "garage code", "memory", 5)
+        user_b_search = search_documents("user-b@example.com", "mailbox slot", "memory", 5)
+
+        assert user_a_query["total"] == 1
+        assert user_a_query["results"][0]["id"] == first["id"]
+        assert user_b_query["total"] == 1
+        assert user_b_query["results"][0]["id"] == second["id"]
+        assert user_a_search["results"][0]["id"] == first["id"]
+        assert user_b_search["results"][0]["id"] == second["id"]
+
+
+@patch("openbrain.services.document_service.generate_embedding", return_value=[])
+def test_recurring_task_completion_scenario(_mock_generate_embedding):
+    backend = FakeCosmosBackend()
+
+    with patch("openbrain.services.document_service.cosmos_client", backend):
+        created = write_document(
+            "dev-user",
+            {
+                "docType": "task",
+                "taskType": "recurringTask",
+                "narrative": "Replace HVAC filter",
+                "contextTags": ["personal", "home"],
+                "state": {
+                    "status": "open",
+                    "isRecurring": True,
+                    "recurrenceDays": 30,
+                    "dueDate": "2026-03-15T00:00:00+00:00",
+                    "progressNotes": [],
+                },
+            },
+        )
+
+        update_document("dev-user", created["id"], {"state.status": "done"})
+        updated = read_document("dev-user", created["id"])
+
+        assert updated["state"]["status"] == "open"
+        assert updated["state"]["completionCount"] == 1
+        assert updated["state"]["lastCompletedAt"] is not None
+        assert updated["state"]["dueDate"] is not None
+        assert updated["state"]["progressNotes"]
+
+
+@patch("openbrain.services.document_service.generate_embedding", return_value=[0.5, 0.6, 0.7])
+def test_raw_query_and_search_sanitization_scenario(_mock_generate_embedding):
+    backend = FakeCosmosBackend()
+
+    with patch("openbrain.services.document_service.cosmos_client", backend):
+        write_document(
+            "dev-user",
+            {
+                "docType": "memory",
+                "narrative": "The breaker panel is in the basement utility room.",
+                "rawText": "breaker panel basement utility room",
+                "contextTags": ["personal", "home"],
+                "hypotheticalQueries": ["Where is the breaker panel?"],
+            },
+        )
+
+        raw_results = raw_query_documents("dev-user", "SELECT * FROM c WHERE c.userId = @userId")
+        memory = raw_results["results"][0]
+
+        assert raw_results["total"] == 1
+        assert memory["docType"] == "memory"
+        assert "rawText" not in memory
+        assert "embedding" not in memory

@@ -252,6 +252,10 @@ Trigger conditions:
 
 All recurrence counts forward from completion date, not from the original due date. Calendar-anchored events belong in an external calendar system, not Open Brain.
 
+#### Retention policy
+
+Completed (one-time) and cancelled tasks are retained indefinitely. There is no server-side TTL or auto-pruning. Keeping historical tasks enables agents to answer questions like "what did I accomplish this month?" and supports pattern analysis over time. Agents may delete individual tasks explicitly if cleanup is desired, but the default is to keep everything.
+
 ### Goal documents
 
 Current baseline:
