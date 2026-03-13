@@ -14,6 +14,35 @@ param(
 
 . (Join-Path $PSScriptRoot "common.ps1")
 
+function Get-PreferredOpenAiEndpoint {
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroupName,
+        [Parameter(Mandatory = $true)][string]$AccountName
+    )
+
+    $account = Invoke-AzJson -Arguments @(
+        "cognitiveservices", "account", "show",
+        "--resource-group", $ResourceGroupName,
+        "--name", $AccountName
+    )
+
+    if ($account.properties -and $account.properties.endpoints) {
+        $endpoints = ConvertTo-Hashtable -InputObject $account.properties.endpoints
+        if ($endpoints.ContainsKey("Azure OpenAI Legacy API - Latest moniker") -and $endpoints["Azure OpenAI Legacy API - Latest moniker"]) {
+            return [string]$endpoints["Azure OpenAI Legacy API - Latest moniker"]
+        }
+        if ($endpoints.ContainsKey("OpenAI Language Model Instance API") -and $endpoints["OpenAI Language Model Instance API"]) {
+            return [string]$endpoints["OpenAI Language Model Instance API"]
+        }
+    }
+
+    if ($account.properties -and $account.properties.endpoint) {
+        return [string]$account.properties.endpoint
+    }
+
+    throw "Unable to determine an OpenAI-compatible endpoint for AI resource '$AccountName'."
+}
+
 $subscription = Ensure-AzLogin -SubscriptionId $SubscriptionId
 $state = Load-DeploymentState -Environment $Environment
 if (-not $state.Count) {
@@ -71,20 +100,7 @@ else {
     "text-embedding-3-large"
 }
 
-$aiEndpoint = Try-Get-AzTsv -Arguments @(
-    "cognitiveservices", "account", "show",
-    "--resource-group", $resourceGroup,
-    "--name", $AiResourceName,
-    "--query", "properties.endpoint"
-)
-if (-not $aiEndpoint) {
-    $aiEndpoint = Try-Get-AzTsv -Arguments @(
-        "cognitiveservices", "account", "show",
-        "--resource-group", $resourceGroup,
-        "--name", $AiResourceName,
-        "--query", "properties.endpoints['Azure AI Model Inference API']"
-    )
-}
+$aiEndpoint = Get-PreferredOpenAiEndpoint -ResourceGroupName $resourceGroup -AccountName $AiResourceName
 if (-not $aiEndpoint) {
     throw "Unable to determine an inference endpoint for AI resource '$AiResourceName'."
 }

@@ -25,10 +25,12 @@ param(
     [bool]$RunWhatIf = $true,
     [string]$EmbeddingDeploymentName = "text-embedding-3-large",
     [string]$EmbeddingModelName = "text-embedding-3-large",
-    [string]$EmbeddingResourceName,
-    [string]$EmbeddingResourceLocation = "eastus2",
     [string]$EmbeddingDeploymentSkuName = "GlobalStandard",
-    [int]$EmbeddingDeploymentSkuCapacity = 10
+    [int]$EmbeddingDeploymentSkuCapacity = 10,
+    [string]$PrimaryModelDeploymentName = "",
+    [string]$PrimaryModelName = "gpt-5.2",
+    [string]$PrimaryModelDeploymentSkuName = "GlobalStandard",
+    [int]$PrimaryModelDeploymentSkuCapacity = 10
 )
 
 . (Join-Path $PSScriptRoot "common.ps1")
@@ -54,6 +56,26 @@ function Resolve-SharedAcrValue {
         }
     }
     return ""
+}
+
+function Get-OpenAiEndpointFromAccount {
+    param([Parameter(Mandatory = $true)]$Account)
+
+    if ($Account.properties -and $Account.properties.endpoints) {
+        $endpoints = ConvertTo-Hashtable -InputObject $Account.properties.endpoints
+        if ($endpoints.ContainsKey("Azure OpenAI Legacy API - Latest moniker") -and $endpoints["Azure OpenAI Legacy API - Latest moniker"]) {
+            return [string]$endpoints["Azure OpenAI Legacy API - Latest moniker"]
+        }
+        if ($endpoints.ContainsKey("OpenAI Language Model Instance API") -and $endpoints["OpenAI Language Model Instance API"]) {
+            return [string]$endpoints["OpenAI Language Model Instance API"]
+        }
+    }
+
+    if ($Account.properties -and $Account.properties.endpoint) {
+        return [string]$Account.properties.endpoint
+    }
+
+    throw "Unable to resolve an Azure OpenAI-compatible endpoint for account '$($Account.name)'."
 }
 
 function Get-PreferredModelSpec {
@@ -108,7 +130,7 @@ function Get-PreferredModelSpec {
     }
 }
 
-function Ensure-EmbeddingDeployment {
+function Ensure-ModelDeployment {
     param(
         [string]$ResourceGroupName,
         [string]$AccountName,
@@ -154,18 +176,18 @@ function Ensure-EmbeddingDeployment {
             return
         }
 
-        Write-Step "Replacing embedding deployment $DeploymentName on $AccountName to match required model/SKU configuration"
+        Write-Step "Replacing model deployment $DeploymentName on $AccountName to match required model/SKU configuration"
         & az cognitiveservices account deployment delete `
             --resource-group $ResourceGroupName `
             --name $AccountName `
             --deployment-name $DeploymentName `
             --output none
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to delete non-conforming embedding deployment '$DeploymentName' on '$AccountName'."
+            throw "Failed to delete non-conforming model deployment '$DeploymentName' on '$AccountName'."
         }
     }
 
-    Write-Step "Creating embedding deployment $DeploymentName on $AccountName"
+    Write-Step "Creating model deployment $DeploymentName on $AccountName"
     & az cognitiveservices account deployment create `
         --resource-group $ResourceGroupName `
         --name $AccountName `
@@ -177,7 +199,7 @@ function Ensure-EmbeddingDeployment {
         --sku-name $RequiredSkuName `
         --output none
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to create embedding deployment '$DeploymentName' on '$AccountName'."
+        throw "Failed to create model deployment '$DeploymentName' on '$AccountName'."
     }
 
     for ($attempt = 1; $attempt -le 40; $attempt++) {
@@ -192,12 +214,12 @@ function Ensure-EmbeddingDeployment {
             return
         }
         if ($provisioningState -eq "Failed") {
-            throw "Embedding deployment '$DeploymentName' entered a failed state."
+            throw "Model deployment '$DeploymentName' entered a failed state."
         }
         Start-Sleep -Seconds 15
     }
 
-    throw "Embedding deployment '$DeploymentName' did not reach Succeeded within the expected time."
+    throw "Model deployment '$DeploymentName' did not reach Succeeded within the expected time."
 }
 
 $subscription = Ensure-AzLogin -SubscriptionId $SubscriptionId
@@ -213,10 +235,10 @@ $AppName = if ($AppName) { $AppName } else { "openbrain-mcp-$Environment" }
 $nameSeed = "$subscription/$ResourceGroup/$Environment"
 $suffix = Get-StableSuffix -InputText $nameSeed
 $CosmosAccountName = if ($CosmosAccountName) { $CosmosAccountName.ToLowerInvariant() } else { "openbrain-cosmos-$Environment-$suffix" }
-$FoundryBaseName = if ($FoundryBaseName) { $FoundryBaseName.ToLowerInvariant() } else { "ob${Environment}${suffix}" }
+$foundrySuffix = Get-StableSuffix -InputText "$nameSeed/$Location/foundry"
+$FoundryBaseName = if ($FoundryBaseName) { $FoundryBaseName.ToLowerInvariant() } else { "ob${Environment}${foundrySuffix}" }
 $FoundryFriendlyName = if ($FoundryFriendlyName) { $FoundryFriendlyName } else { "Open Brain $Environment" }
 $FoundryProjectName = if ($FoundryProjectName) { $FoundryProjectName.ToLowerInvariant() } else { "openbrain-$Environment" }
-$EmbeddingResourceName = if ($EmbeddingResourceName) { $EmbeddingResourceName.ToLowerInvariant() } else { "openbrain-openai-$Environment-$suffix" }
 $logAnalyticsName = "log-openbrain-$Environment"
 
 $state = Load-DeploymentState -Environment $Environment
@@ -248,8 +270,9 @@ Set-StateValues -State $state -Updates @{
     embeddingDeployment = $EmbeddingDeploymentName
     embeddingModelName = $EmbeddingModelName
     embeddingDeploymentSkuName = $EmbeddingDeploymentSkuName
-    embeddingResourceName = $EmbeddingResourceName
-    embeddingResourceLocation = $EmbeddingResourceLocation
+    primaryModelDeployment = $PrimaryModelDeploymentName
+    primaryModelName = $PrimaryModelName
+    primaryModelDeploymentSkuName = $PrimaryModelDeploymentSkuName
 }
 
 Ensure-ResourceGroup -Name $ResourceGroup -Location $Location
@@ -539,6 +562,11 @@ if ($CreateFoundryHub -and -not $CreateFoundryProject) {
     $CreateFoundryProject = $true
 }
 
+if (-not $CreateFoundryProject) {
+    Write-Host "CreateFoundryProject was not specified. Defaulting to the current Microsoft Foundry resource/project model." -ForegroundColor Yellow
+    $CreateFoundryProject = $true
+}
+
 if ($CreateFoundryProject) {
     $templatePath = Join-Path $PSScriptRoot "templates\foundry-resource-project.bicep"
     if ($RunWhatIf) {
@@ -574,6 +602,11 @@ if ($CreateFoundryProject) {
     )
 
     $outputs = ConvertTo-Hashtable -InputObject $deployment.properties.outputs
+    $foundryAccount = Invoke-AzJson -Arguments @(
+        "cognitiveservices", "account", "show",
+        "--resource-group", $ResourceGroup,
+        "--name", $outputs.aiFoundryName.value
+    )
     Set-StateValues -State $state -Updates @{
         aiFoundryName = $outputs.aiFoundryName.value
         aiFoundryId = $outputs.aiFoundryId.value
@@ -581,69 +614,40 @@ if ($CreateFoundryProject) {
         foundryProjectName = $outputs.aiProjectName.value
         foundryProjectId = $outputs.aiProjectId.value
         foundryMode = "resource-project"
+        aiServicesName = [string]$foundryAccount.name
+        aiServicesId = [string]$foundryAccount.id
+        aiServicesEndpoint = (Get-OpenAiEndpointFromAccount -Account $foundryAccount)
+        aiServicesKind = [string]$foundryAccount.kind
+        aiServicesLocation = [string]$foundryAccount.location
+        embeddingResourceName = ""
+        embeddingResourceLocation = ""
     }
 }
 
-Write-Step "Ensuring Azure OpenAI embedding resource $EmbeddingResourceName"
-$embeddingAccountId = Try-Get-AzTsv -Arguments @(
-    "cognitiveservices", "account", "show",
-    "--resource-group", $ResourceGroup,
-    "--name", $EmbeddingResourceName,
-    "--query", "id"
-)
-if (-not $embeddingAccountId) {
-    & az cognitiveservices account create `
-        --name $EmbeddingResourceName `
-        --resource-group $ResourceGroup `
-        --kind OpenAI `
-        --sku S0 `
-        --location $EmbeddingResourceLocation `
-        --assign-identity `
-        --custom-domain $EmbeddingResourceName `
-        --yes `
-        --output none
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to create Azure OpenAI embedding resource '$EmbeddingResourceName'."
-    }
+if (-not ($state.ContainsKey("aiServicesName") -and $state.aiServicesName)) {
+    throw "No AI runtime resource was recorded in deployment state. Foundry deployment must succeed before model deployments are created."
 }
 
-$embeddingIdentityType = Try-Get-AzTsv -Arguments @(
-    "cognitiveservices", "account", "show",
-    "--resource-group", $ResourceGroup,
-    "--name", $EmbeddingResourceName,
-    "--query", "identity.type"
-)
-if ($embeddingIdentityType -ne "SystemAssigned") {
-    Write-Step "Ensuring system-assigned managed identity on Azure OpenAI resource $EmbeddingResourceName"
-    & az cognitiveservices account identity assign `
-        --resource-group $ResourceGroup `
-        --name $EmbeddingResourceName `
-        --output none
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to assign a system-managed identity to Azure OpenAI resource '$EmbeddingResourceName'."
-    }
-}
-
-$embeddingAccount = Invoke-AzJson -Arguments @(
-    "cognitiveservices", "account", "show",
-    "--resource-group", $ResourceGroup,
-    "--name", $EmbeddingResourceName
-)
-Set-StateValues -State $state -Updates @{
-    aiServicesName = [string]$embeddingAccount.name
-    aiServicesId = [string]$embeddingAccount.id
-    aiServicesEndpoint = [string]$embeddingAccount.properties.endpoint
-    aiServicesKind = [string]$embeddingAccount.kind
-    aiServicesLocation = [string]$embeddingAccount.location
-}
-
-Ensure-EmbeddingDeployment `
+$runtimeAiResourceName = [string]$state.aiServicesName
+Write-Step "Ensuring embedding deployment $EmbeddingDeploymentName on AI resource $runtimeAiResourceName"
+Ensure-ModelDeployment `
     -ResourceGroupName $ResourceGroup `
-    -AccountName ([string]$embeddingAccount.name) `
+    -AccountName $runtimeAiResourceName `
     -DeploymentName $EmbeddingDeploymentName `
     -ModelName $EmbeddingModelName `
     -RequiredSkuName $EmbeddingDeploymentSkuName `
     -SkuCapacity $EmbeddingDeploymentSkuCapacity
+
+if ($PrimaryModelDeploymentName) {
+    Write-Step "Ensuring primary model deployment $PrimaryModelDeploymentName on AI resource $runtimeAiResourceName"
+    Ensure-ModelDeployment `
+        -ResourceGroupName $ResourceGroup `
+        -AccountName $runtimeAiResourceName `
+        -DeploymentName $PrimaryModelDeploymentName `
+        -ModelName $PrimaryModelName `
+        -RequiredSkuName $PrimaryModelDeploymentSkuName `
+        -SkuCapacity $PrimaryModelDeploymentSkuCapacity
+}
 
 Save-DeploymentState -Environment $Environment -State $state
 
