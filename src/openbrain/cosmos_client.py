@@ -137,7 +137,7 @@ def vector_search(query_vector: list[float], user_id: str, doc_type: str | None 
     else:
         sql += "AND (c.docType = 'memory' OR c.docType = 'idea') "
 
-    sql += "ORDER BY VectorDistance(c.embedding, @queryVector) DESC"
+    sql += "ORDER BY VectorDistance(c.embedding, @queryVector)"
 
     try:
         return list(
