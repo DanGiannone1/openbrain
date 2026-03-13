@@ -46,6 +46,9 @@ resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-09-01' = 
   name: aiProjectName
   location: location
   tags: tags
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
     displayName: aiProjectDisplayName
     description: aiProjectDescription

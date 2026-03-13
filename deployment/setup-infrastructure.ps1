@@ -24,7 +24,9 @@ param(
     [string]$FoundryDescription = "Open Brain Foundry project",
     [bool]$RunWhatIf = $true,
     [string]$EmbeddingDeploymentName = "text-embedding-3-large",
-    [string]$EmbeddingModelName = "text-embedding-3-large"
+    [string]$EmbeddingModelName = "text-embedding-3-large",
+    [string]$EmbeddingResourceName,
+    [string]$EmbeddingResourceLocation = "eastus2"
 )
 
 . (Join-Path $PSScriptRoot "common.ps1")
@@ -178,6 +180,7 @@ $CosmosAccountName = if ($CosmosAccountName) { $CosmosAccountName.ToLowerInvaria
 $FoundryBaseName = if ($FoundryBaseName) { $FoundryBaseName.ToLowerInvariant() } else { "ob${Environment}${suffix}" }
 $FoundryFriendlyName = if ($FoundryFriendlyName) { $FoundryFriendlyName } else { "Open Brain $Environment" }
 $FoundryProjectName = if ($FoundryProjectName) { $FoundryProjectName.ToLowerInvariant() } else { "openbrain-$Environment" }
+$EmbeddingResourceName = if ($EmbeddingResourceName) { $EmbeddingResourceName.ToLowerInvariant() } else { "openbrain-openai-$Environment-$suffix" }
 $logAnalyticsName = "log-openbrain-$Environment"
 
 $state = Load-DeploymentState -Environment $Environment
@@ -330,6 +333,26 @@ if (-not $cosmosId) {
     }
 }
 
+$cosmosReady = $false
+for ($attempt = 1; $attempt -le 20 -and -not $cosmosReady; $attempt++) {
+    $cosmosId = Try-Get-AzTsv -Arguments @(
+        "cosmosdb", "show",
+        "--resource-group", $ResourceGroup,
+        "--name", $CosmosAccountName,
+        "--query", "id"
+    )
+    if ($cosmosId) {
+        $cosmosReady = $true
+        break
+    }
+
+    if ($attempt -eq 20) {
+        throw "Cosmos DB account '$CosmosAccountName' was created but never became readable."
+    }
+
+    Start-Sleep -Seconds 15
+}
+
 $capabilities = @(Invoke-AzJson -Arguments @(
     "cosmosdb", "show",
     "--resource-group", $ResourceGroup,
@@ -382,15 +405,17 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Step "Ensuring vector-enabled Cosmos container $CosmosContainer"
-$containerUri = "https://management.azure.com/subscriptions/$subscription/resourceGroups/$ResourceGroup/providers/Microsoft.DocumentDB/databaseAccounts/$CosmosAccountName/sqlDatabases/$CosmosDatabase/containers/$CosmosContainer?api-version=2024-11-15"
-$containerResource = @{
-    id = $CosmosContainer
-    partitionKey = @{
-        paths = @("/userId")
-        kind = "Hash"
-        version = 2
-    }
-    indexingPolicy = @{
+$containerId = Try-Get-AzTsv -Arguments @(
+    "cosmosdb", "sql", "container", "show",
+    "--resource-group", $ResourceGroup,
+    "--account-name", $CosmosAccountName,
+    "--database-name", $CosmosDatabase,
+    "--name", $CosmosContainer,
+    "--query", "id"
+)
+
+if (-not $containerId) {
+    $indexingPolicy = @{
         indexingMode = "consistent"
         automatic = $true
         includedPaths = @(
@@ -408,7 +433,7 @@ $containerResource = @{
             }
         )
     }
-    vectorEmbeddingPolicy = @{
+    $vectorEmbeddingPolicy = @{
         vectorEmbeddings = @(
             @{
                 path = "/embedding"
@@ -418,28 +443,54 @@ $containerResource = @{
             }
         )
     }
-}
-$containerProperties = @{ resource = $containerResource }
-if ($CosmosMode -eq "provisioned") {
-    $containerProperties.options = @{ throughput = 400 }
-}
-$containerBody = @{
-    location = $Location
-    properties = $containerProperties
-} | ConvertTo-Json -Depth 20 -Compress
 
-$containerCreated = $false
-for ($attempt = 1; $attempt -le 20 -and -not $containerCreated; $attempt++) {
-    try {
-        Invoke-AzRestJson -Method "PUT" -Uri $containerUri -Body $containerBody | Out-Null
-        $containerCreated = $true
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "openbrain"
+    if (-not (Test-Path $tempRoot)) {
+        New-Item -ItemType Directory -Path $tempRoot | Out-Null
     }
-    catch {
-        if ($attempt -eq 20) {
-            throw
+    $indexingPolicyPath = Join-Path $tempRoot "cosmos-indexing-policy-$Environment.json"
+    $vectorPolicyPath = Join-Path $tempRoot "cosmos-vector-policy-$Environment.json"
+    ($indexingPolicy | ConvertTo-Json -Depth 10) | Set-Content -Path $indexingPolicyPath
+    ($vectorEmbeddingPolicy | ConvertTo-Json -Depth 10) | Set-Content -Path $vectorPolicyPath
+
+    try {
+        $createArgs = @(
+            "cosmosdb", "sql", "container", "create",
+            "--resource-group", $ResourceGroup,
+            "--account-name", $CosmosAccountName,
+            "--database-name", $CosmosDatabase,
+            "--name", $CosmosContainer,
+            "--partition-key-path", "/userId",
+            "--partition-key-version", "2",
+            "--idx", "@$indexingPolicyPath",
+            "--vector-embeddings", "@$vectorPolicyPath",
+            "--output", "none"
+        )
+        if ($CosmosMode -eq "provisioned") {
+            $createArgs += @("--throughput", "400")
         }
-        Write-Host "Cosmos container create/update attempt $attempt failed, retrying in 45s..." -ForegroundColor Yellow
-        Start-Sleep -Seconds 45
+
+        $containerCreated = $false
+        for ($attempt = 1; $attempt -le 20 -and -not $containerCreated; $attempt++) {
+            try {
+                & az @createArgs
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Failed to create Cosmos container '$CosmosContainer'."
+                }
+                $containerCreated = $true
+            }
+            catch {
+                if ($attempt -eq 20) {
+                    throw
+                }
+                Write-Host "Cosmos container create attempt $attempt failed, retrying in 45s..." -ForegroundColor Yellow
+                Start-Sleep -Seconds 45
+            }
+        }
+    }
+    finally {
+        Remove-Item -Path $indexingPolicyPath -ErrorAction SilentlyContinue
+        Remove-Item -Path $vectorPolicyPath -ErrorAction SilentlyContinue
     }
 }
 
@@ -487,29 +538,89 @@ if ($CreateFoundryProject) {
         aiFoundryName = $outputs.aiFoundryName.value
         aiFoundryId = $outputs.aiFoundryId.value
         aiFoundryEndpoint = $outputs.aiFoundryEndpoint.value
-        aiServicesName = $outputs.aiFoundryName.value
-        aiServicesId = $outputs.aiFoundryId.value
-        aiServicesEndpoint = $outputs.aiFoundryEndpoint.value
         foundryProjectName = $outputs.aiProjectName.value
         foundryProjectId = $outputs.aiProjectId.value
         foundryMode = "resource-project"
     }
 }
 
-$aiResourceName = if ($state.ContainsKey("aiFoundryName") -and $state.aiFoundryName) {
+$embeddingAccountName = ""
+$embeddingAccountResourceGroup = $ResourceGroup
+$foundryAccountName = if ($state.ContainsKey("aiFoundryName") -and $state.aiFoundryName) {
     [string]$state.aiFoundryName
-}
-elseif ($state.ContainsKey("aiServicesName") -and $state.aiServicesName) {
-    [string]$state.aiServicesName
 }
 else {
     ""
 }
 
-if ($aiResourceName) {
+if ($foundryAccountName) {
+    try {
+        Get-PreferredModelSpec `
+            -ResourceGroupName $ResourceGroup `
+            -AccountName $foundryAccountName `
+            -ModelName $EmbeddingModelName | Out-Null
+
+        $embeddingAccountName = $foundryAccountName
+        $foundryAccount = Invoke-AzJson -Arguments @(
+            "cognitiveservices", "account", "show",
+            "--resource-group", $ResourceGroup,
+            "--name", $foundryAccountName
+        )
+        Set-StateValues -State $state -Updates @{
+            aiServicesName = $foundryAccountName
+            aiServicesId = [string]$foundryAccount.id
+            aiServicesEndpoint = [string]$foundryAccount.properties.endpoint
+            aiServicesKind = [string]$foundryAccount.kind
+        }
+    }
+    catch {
+        Write-Host "Embedding model '$EmbeddingModelName' is unavailable on Foundry account '$foundryAccountName'. Falling back to a dedicated Azure OpenAI resource." -ForegroundColor Yellow
+    }
+}
+
+if (-not $embeddingAccountName) {
+    Write-Step "Ensuring Azure OpenAI embedding resource $EmbeddingResourceName"
+    $embeddingAccountId = Try-Get-AzTsv -Arguments @(
+        "cognitiveservices", "account", "show",
+        "--resource-group", $ResourceGroup,
+        "--name", $EmbeddingResourceName,
+        "--query", "id"
+    )
+    if (-not $embeddingAccountId) {
+        & az cognitiveservices account create `
+            --name $EmbeddingResourceName `
+            --resource-group $ResourceGroup `
+            --kind OpenAI `
+            --sku S0 `
+            --location $EmbeddingResourceLocation `
+            --assign-identity `
+            --custom-domain $EmbeddingResourceName `
+            --yes `
+            --output none
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create Azure OpenAI embedding resource '$EmbeddingResourceName'."
+        }
+    }
+
+    $embeddingAccount = Invoke-AzJson -Arguments @(
+        "cognitiveservices", "account", "show",
+        "--resource-group", $ResourceGroup,
+        "--name", $EmbeddingResourceName
+    )
+    $embeddingAccountName = [string]$embeddingAccount.name
+    Set-StateValues -State $state -Updates @{
+        aiServicesName = $embeddingAccountName
+        aiServicesId = [string]$embeddingAccount.id
+        aiServicesEndpoint = [string]$embeddingAccount.properties.endpoint
+        aiServicesKind = [string]$embeddingAccount.kind
+        aiServicesLocation = [string]$embeddingAccount.location
+    }
+}
+
+if ($embeddingAccountName) {
     Ensure-EmbeddingDeployment `
-        -ResourceGroupName $ResourceGroup `
-        -AccountName $aiResourceName `
+        -ResourceGroupName $embeddingAccountResourceGroup `
+        -AccountName $embeddingAccountName `
         -DeploymentName $EmbeddingDeploymentName `
         -ModelName $EmbeddingModelName
 }
