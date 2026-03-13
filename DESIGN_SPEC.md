@@ -1,15 +1,15 @@
 # Open Brain: Technical Design Specification
 
-> Version: 3.2
+> Version: 3.4
 > Date: 2026-03-12
-> Status: Baseline for implementation — interview decisions restored
+> Status: Baseline for implementation
 > Repository: `openbrain`
 
 ## 1. Purpose
 
-Open Brain is an MCP server that stores personal life-state documents, generates embeddings, and serves retrieval/query/update operations to external agents and clients.
+Open Brain is an MCP server that stores personal life-state documents, generates embeddings, and serves retrieval, query, and update operations to external agents and clients.
 
-This repo owns the server and its deployment surface.
+This repo owns the MCP server and its deployment surface.
 
 This repo does not own:
 - Telegram ingestion
@@ -22,35 +22,42 @@ This repo does not own:
 | Principle | Implication |
 |---|---|
 | Server = data layer | The server stores, embeds, retrieves, and mutates documents. It does not make business decisions. |
+| Agent-owned reasoning | Deduplication, prioritization, classification, and merging belong to AI agents using MCP tools. |
 | Generic tools | Keep the MCP surface small and document-shaped. Avoid domain-specific tools. |
 | Single container | Use one Cosmos DB container and discriminate by `docType`. |
-| Permissive payloads | Favor flexible JSON payloads over rigid tables. `BaseDocument` and `AiMetadata` use Pydantic `extra="allow"` so unknown fields sent by clients are accepted and preserved on round-trip. |
+| Permissive payloads | Favor flexible JSON payloads over rigid tables. Unknown client fields should survive round-trip storage. |
 | Server-owned embeddings | Clients send text, not vectors. Embeddings are generated inside the server. |
-| Partition by user | Keep `userId` even in single-user MVP so the storage shape does not have to change later. |
-| Deployability first | The implementation must match the Azure deployment model documented here. |
+| Partition by user | Keep `userId` even in single-user MVP so the storage shape does not need to change later. |
+| Deployability first | Runtime design must match the Azure deployment model documented here. |
 
 ## 3. Scope and Non-Goals
 
 ### In scope
+
 - MCP server with `stdio` and `streamable-http` transports
 - Azure Container Apps deployment
 - Azure Cosmos DB for NoSQL with vector search
 - Microsoft Foundry backed embedding generation
-- CRUD, query, vector search, and raw read-only query operations
+- CRUD, query, vector search, and read-only raw query operations
 
 ### Out of scope
+
 - Multi-user identity design beyond the existing `userId` partition key
-- Server-side deduplication or prioritization
-  > **Expected dedup pattern:** Agents are responsible for deduplication. Before writing a new document, agents should call `search` with the candidate narrative to check for near-duplicates. The agent decides whether to write a new document, update an existing one, or skip. The server provides retrieval tools but does not enforce uniqueness or similarity thresholds.
+- Server-side deduplication, prioritization, merging, or classification
 - Calendar sync, web UI, or Telegram bot logic
 - Server-side taxonomy enforcement for tags
+
+Expected dedup pattern:
+- agents call `search` before writing new memory-like documents
+- the agent decides whether to create, update in place, or skip
+- the MCP server never enforces similarity thresholds or uniqueness rules
 
 ## 4. System Architecture
 
 ### Runtime topology
 
 1. External agents and clients connect to the MCP server over `stdio` or `streamable-http`.
-2. The server validates documents, generates embeddings, and writes to Cosmos DB.
+2. The server validates documents, generates embeddings where configured, and writes to Cosmos DB.
 3. Search requests embed the query text, execute Cosmos vector search, and return ranked results.
 4. The server never returns the raw embedding array to callers.
 
@@ -61,7 +68,7 @@ This repo does not own:
 | MCP server | Azure Container Apps |
 | Data store | Azure Cosmos DB for NoSQL |
 | Embeddings | Microsoft Foundry / Azure OpenAI models |
-| Container image | Azure Container Registry |
+| Container image | Shared Azure Container Registry |
 | Observability | Log Analytics via Container Apps environment |
 
 ### Transport
@@ -82,10 +89,29 @@ Use a single Cosmos DB container:
 - Container: `openbrain-data`
 - Partition key: `/userId`
 
-Supported document classes:
+Current MVP document classes:
 - `memory`
+- `idea`
 - `task`
-- `review`
+- `goal`
+- `misc`
+- `userSettings`
+
+### Taxonomy boundaries
+
+- `memory`: factual or reference information you want to recall later
+- `idea`: speculative, generative, or not-yet-committed thoughts you want to revisit later
+- `task`: discrete actions with a finite completion loop
+- `goal`: ongoing objectives or areas of progress, distinct from discrete tasks
+- `misc`: ambiguous or under-specified captures that should be preserved without forced classification
+- `userSettings`: per-user configuration documents stored alongside content in the same partition
+
+Important decisions:
+- `fact` is not a separate `docType`; facts live in `memory`
+- `review` is not an MVP `docType`
+- `reminder` is not a stored entity; reminders are agent behavior layered on top of tasks and goals
+- ambiguous or low-confidence captures can be stored as `misc`
+- the user-managed tag taxonomy is stored in Cosmos as a `userSettings` document
 
 ### Common fields
 
@@ -93,12 +119,12 @@ Supported document classes:
 |---|---|---|---|
 | `id` | `string` | Server | Format: `{docType}:{uuid4}` |
 | `userId` | `string` | Server | Partition key |
-| `docType` | `string` | Client | `memory`, `task`, or `review` |
+| `docType` | `string` | Client | `memory`, `idea`, `task`, `goal`, `misc`, or `userSettings` |
 | `narrative` | `string` | Client | Main human-readable text used for embeddings |
 | `embedding` | `float[]` | Server | Never returned to clients |
 | `rawText` | `string` | Client optional | Original brain dump, stored but not returned |
-| `contextTags` | `string[]` | Client optional | Not used for filtering in MVP |
-| `aiMetadata` | `AiMetadata` | Client optional | AI-generated metadata (see AiMetadata sub-schema below) |
+| `contextTags` | `string[]` | Client optional | Lightweight taxonomy tags such as `personal`, `soligence`, or `microsoft` |
+| `aiMetadata` | `AiMetadata` | Client optional | AI-generated metadata |
 | `createdAt` | `string` | Server | ISO 8601 UTC |
 | `updatedAt` | `string` | Server | ISO 8601 UTC |
 
@@ -109,38 +135,76 @@ Immutable from client updates:
 - `createdAt`
 - `embedding`
 
-#### Pydantic model configuration
+### Pydantic model configuration
 
 Both `BaseDocument` and `AiMetadata` are configured with `extra="allow"`. Any JSON fields not explicitly declared in the schema are accepted during validation and stored as-is in Cosmos DB. This supports forward compatibility: clients can attach additional metadata fields without requiring server-side schema changes.
 
-#### AiMetadata sub-schema
+### Tagging
+
+Tagging is intentionally lightweight:
+- tags live in `contextTags`
+- tags should come from a user-managed taxonomy to avoid uncontrolled sprawl
+- the initial seeded taxonomy is `personal`, `soligence`, and `microsoft`
+- the AI can add or refine tags over time
+- tags support organization and filtering without requiring a rigid server-enforced schema
+
+Taxonomy storage:
+- the allowed or preferred user tag taxonomy is stored in a per-user `userSettings` document
+- content documents reference tags through `contextTags`
+- the server stores the taxonomy but does not hard-enforce it during writes in MVP
+
+### AiMetadata sub-schema
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `urgency` | `"high"` \| `"medium"` \| `"low"` \| `null` | `null` | AI-assessed urgency level |
 | `inferredEntities` | `string[]` | `[]` | Entity names extracted by the AI |
 
-Model configuration: `extra="allow"` — unknown fields sent by clients are preserved.
+Model configuration: `extra="allow"` - unknown fields sent by clients are preserved.
 
 ### Memory documents
+
+Current baseline:
+- `memory` is the factual and reference-recall document family
+- memories are embedded and searched semantically
+- evolving truths such as passwords or account details are handled by agent-driven in-place updates
 
 Required:
 - `docType = "memory"`
 - `narrative`
-- `memoryType`: `"fact"` | `"idea"` — classifies the memory
 
 Optional:
-- `hypotheticalQueries`: `string[]` — 3 future questions this narrative answers, used for HyDE embedding quality (default: `[]`)
-- `supersededBy`: `string | null` — `id` of the document that replaces this one, set by cleanup agents (default: `null`)
+- `hypotheticalQueries`: `string[]` - 3 future questions this narrative answers, used for HyDE embedding quality (default: `[]`)
+
+### Idea documents
+
+Current baseline:
+- `idea` captures speculative, generative, or not-yet-committed thoughts
+- examples include product ideas, feature ideas, business ideas, and exploratory concepts
+- ideas are preserved for later recall and refinement rather than treated as factual truth
+
+Required:
+- `docType = "idea"`
+- `narrative`
+
+Optional:
+- `goalId`: `string | null` - optional link to a related goal (default: `null`)
 
 ### Task documents
+
+Current baseline:
+- `task` is for discrete actions with a finite completion loop
+- the MVP task classes are one-time and recurring tasks
+- reminders are agent behavior layered on top of task state, not a separate stored entity
+- tasks may contribute toward a goal and can link back to it through `goalId`
 
 Required:
 - `docType = "task"`
 - `narrative`
-- `taskType`: `"goal"` | `"oneTimeTask"` | `"recurringTask"` — classifies the task
+- `taskType`: `"oneTimeTask"` | `"recurringTask"`
 
 Optional:
+- `goalId`: `string | null` - optional link to a related goal (default: `null`)
 - `state`: `TaskState` object (default: `TaskState()` with `status = "open"`)
 
 #### TaskState sub-schema
@@ -150,14 +214,14 @@ Optional:
 | `status` | `"open"` \| `"inProgress"` \| `"done"` \| `"cancelled"` \| `"deferred"` | `"open"` | Current lifecycle status |
 | `dueDate` | `string \| null` | `null` | ISO 8601 UTC |
 | `isRecurring` | `bool` | `false` | Whether the task repeats |
-| `recurrenceDays` | `int \| null` | `null` | Days between recurrences (see conversion table) |
+| `recurrenceDays` | `int \| null` | `null` | Days between recurrences |
 | `lastCompletedAt` | `string \| null` | `null` | ISO 8601 UTC |
 | `completionCount` | `int` | `0` | Incremented on each completion |
 | `progressNotes` | `string[]` | `[]` | Append-only log of progress entries |
 
 #### `recurrenceDays` conversion table
 
-`recurrenceDays` is an integer representing calendar days between recurrences. The Triage Agent converts natural-language expressions before calling `write`:
+`recurrenceDays` is an integer representing calendar days between recurrences. The triage agent converts natural-language expressions before calling `write`.
 
 | Expression | `recurrenceDays` |
 |---|---|
@@ -168,38 +232,87 @@ Optional:
 | every 6 months | `180` |
 | yearly | `365` |
 
-The server performs no interpretation of this field — it stores and returns the integer as-is.
+The server performs no interpretation of this field beyond recurring-task completion behavior.
 
 #### Recurring task completion logic
 
 When a recurring task's `state.status` is set to `"done"` via `update`, the server executes these steps:
 
-1. **Increment** `state.completionCount` by 1
-2. **Set** `state.lastCompletedAt` to the current UTC timestamp
-3. **Compute** `state.dueDate` as `now + state.recurrenceDays` days
-4. **Reset** `state.status` to `"open"`
-5. **Append** a completion note (`"Completed on YYYY-MM-DD"`) to `state.progressNotes`
+1. Increment `state.completionCount` by 1.
+2. Set `state.lastCompletedAt` to the current UTC timestamp.
+3. Compute `state.dueDate` as `now + state.recurrenceDays` days.
+4. Reset `state.status` to `"open"`.
+5. Append a completion note to `state.progressNotes`.
 
-**No-op guard:** If the task's `state.status` is already `"done"`, setting it to `"done"` again has no effect.
+Trigger conditions:
+- the update sets `state.status` to `"done"`
+- the existing `state.isRecurring` is `true`
+- the existing `state.recurrenceDays` is defined and non-null
+- the existing `state.status` is not already `"done"`
 
-**Trigger conditions** (all must be true):
-- The update sets `state.status` to `"done"`
-- The existing `state.isRecurring` is `true`
-- The existing `state.recurrenceDays` is defined and non-null
-- The existing `state.status` is not already `"done"`
+All recurrence counts forward from completion date, not from the original due date. Calendar-anchored events belong in an external calendar system, not Open Brain.
 
-All recurrence counts down from **completion date**, not from the original due date. Calendar-anchored events (rent on the 1st, taxes on April 15) belong in Google Calendar, not Open Brain.
+### Goal documents
 
-### Review documents
+Current baseline:
+- `goal` is distinct from `task`
+- goals represent ongoing objectives or areas of progress rather than discrete checklist items
+- reminders for stale goals are agent behavior, not a separate stored entity
+- one purpose of the system is to help agents break goals down into tasks and track progress over time
 
 Required:
-- `docType = "review"`
+- `docType = "goal"`
 - `narrative`
 
 Optional:
-- `triageAttempt`: `object` — free-form record of the triage agent's reasoning (default: `{}`)
-- `resolution`: `"reIngested"` | `"discarded"` | `null` — outcome of the review (default: `null`)
-- `resolvedAt`: `string | null` — ISO 8601 UTC timestamp of resolution (default: `null`)
+- `state`: `GoalState` object (default: `GoalState()` with `status = "active"`)
+
+#### GoalState sub-schema
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `status` | `"active"` \| `"paused"` \| `"completed"` \| `"abandoned"` | `"active"` | Goal lifecycle state |
+| `targetDate` | `string \| null` | `null` | ISO 8601 UTC |
+| `lastProgressAt` | `string \| null` | `null` | ISO 8601 UTC |
+| `progressNotes` | `string[]` | `[]` | Append-only log of progress updates |
+
+### Ambiguous intake handling
+
+Current baseline:
+- `review` is not an MVP document type
+- ambiguous or low-confidence captures can be stored as `misc`
+- the agent may also ask for clarification outside this repo when that orchestration exists
+
+### Misc documents
+
+Current baseline:
+- `misc` is the catch-all intake type for ambiguous, under-specified, or not-yet-classified captures
+- `misc` exists so the system can preserve uncertain input without forcing a premature classification decision
+- agents are expected to revisit `misc` items and convert them into better-typed documents over time
+- `misc` is query-only until reclassified and is not embedded for semantic search
+
+Required:
+- `docType = "misc"`
+- `narrative`
+
+Optional:
+- `triageNotes`: `string | null` - brief note about why the item remained ambiguous (default: `null`)
+- `suggestedDocType`: `string | null` - best current guess such as `task`, `goal`, `memory`, or `idea` (default: `null`)
+
+### User settings documents
+
+Current baseline:
+- `userSettings` stores per-user configuration in the same Cosmos container and partition model
+- it is not embedded and is not part of semantic search
+- the initial use case is storing the user-managed tag taxonomy
+
+Required:
+- `docType = "userSettings"`
+- `id = "userSettings:{userId}"`
+
+Optional:
+- `tagTaxonomy`: `string[]` - user-managed preferred tags such as `personal`, `soligence`, and `microsoft`
+- additional user-scoped config fields may be added later under the same document
 
 ## 6. Embeddings and Vector Search
 
@@ -212,17 +325,29 @@ Optional:
 | Vector dimensions | 3072 |
 | Distance function | `cosine` |
 
-`text-embedding-3-large` is the current default target because it is the highest-quality embedding model in the current Azure OpenAI / Foundry catalog.
+`text-embedding-3-large` is the default target for MVP.
+
+Current architecture decision:
+- use the `openai` Python package with the `OpenAI` client
+- use OpenAI v1 endpoints
+- do not use the Responses API for embeddings
+- use API key authentication for embeddings for now
 
 ### Runtime client contract
 
-The implementation target is the OpenAI v1 API.
+The implementation target for embeddings is the OpenAI v1 API.
 
 The server stores the Foundry resource base endpoint in `AI_FOUNDRY_ENDPOINT` and normalizes it to an OpenAI v1 base URL at runtime.
 
 Accepted base endpoint shapes:
 - `https://<resource>.services.ai.azure.com/`
 - `https://<resource>.openai.azure.com/`
+
+Canonical implementation choice:
+- prefer the `OpenAI` client over `AzureOpenAI`
+- use `client.embeddings.create(...)` for embeddings
+- do not model embeddings around the Responses API
+- keep API key auth as the MVP path because current Microsoft docs still document API key auth for embeddings with OpenAI v1
 
 Implementation target:
 
@@ -249,23 +374,30 @@ embedding = response.data[0].embedding
 ### HyDE strategy
 
 For `memory` documents with `hypotheticalQueries`:
-1. Embed the `narrative`
-2. Embed each hypothetical query
-3. Average the vectors element-wise
-4. Store the averaged vector as `embedding`
+1. Embed the `narrative`.
+2. Embed each hypothetical query.
+3. Average the vectors element-wise.
+4. Store the averaged vector as `embedding`.
 
-For all other documents, embed the `narrative` directly.
+For all other embedded documents, embed the `narrative` directly.
 
-When a search result contains `hypotheticalQueries`, the server logs them at `DEBUG` level for search quality analysis. This does not affect the response — `hypotheticalQueries` is still stripped from results.
+### Embedding scope
+
+Semantic search is intentionally narrower than the full document store.
+
+Current decision:
+- `memory` and `idea` are the primary embedded and searchable document classes
+- `task`, `goal`, and `misc` are operational records first and should be handled through `query`
+- if a future use case proves it necessary, task or goal embeddings can be added later
+
+When a search result contains `hypotheticalQueries`, the server logs them at `DEBUG` level for search quality analysis. `hypotheticalQueries` is still stripped from results.
 
 ### Cosmos vector score semantics
 
-`VectorDistance()` with cosine distance returns a **similarity** score, not a raw distance. The return range for cosine is `-1` (least similar) to `+1` (most similar).
-
-The server aliases the result as `score` in the query and returns it directly with no post-processing.
+`VectorDistance()` with cosine distance returns a similarity score, not a raw distance. The server aliases the result as `score` and returns it directly with no post-processing.
 
 Callers should treat `score` as a ranking signal:
-- higher is better (more similar)
+- higher is better
 - ranking matters more than absolute thresholds
 
 ### Cosmos container policy
@@ -312,10 +444,9 @@ The container must be created with a vector embedding policy and vector index at
 ```
 
 Notes:
-- `diskANN` is a graph-based approximate nearest neighbor index that scales to millions of vectors while maintaining high recall. It handles both small and large datasets well.
-- Both `quantizedFlat` and `diskANN` require at least 1,000 vectors before the index activates. Below that threshold Cosmos performs a full scan regardless.
-- Vector indexes are immutable after container creation — choosing diskANN now avoids a future migration if the dataset grows.
-- Vector search requires the account capability `EnableNoSQLVectorSearch`.
+- `diskANN` is the chosen vector index type
+- vector indexes are immutable after container creation
+- vector search requires the account capability `EnableNoSQLVectorSearch`
 
 ## 7. MCP Tool Surface
 
@@ -334,35 +465,42 @@ The server exposes exactly seven tools:
 ### Tool behavior requirements
 
 #### `write`
-- Validates the document against the Pydantic model class for the given `docType` (`MemoryDocument`, `TaskDocument`, or `ReviewDocument`)
-- Pydantic validation errors are returned to the client with field-level detail (location and message for each error)
-- Generates `id` (format `{docType}:{uuid4}`), `userId`, timestamps (`createdAt`, `updatedAt`), and `embedding`
-- Ignores client attempts to set server-owned fields
-- Returns `{"status": "created", "id": ..., "docType": ...}`
+
+- validates the document against the Pydantic model class for the given `docType`
+- valid MVP document models are `MemoryDocument`, `IdeaDocument`, `TaskDocument`, `GoalDocument`, `MiscDocument`, and `UserSettingsDocument`
+- returns field-level validation detail when validation fails
+- generates `id`, `userId`, `createdAt`, `updatedAt`, and `embedding` for document types that participate in semantic search
+- ignores client attempts to set server-owned fields
+- returns `{"status": "created", "id": ..., "docType": ...}`
 
 #### `read`
-- Requires `userId` and `id`
-- Returns the document without internal fields such as `embedding` and `rawText`
+
+- requires `userId` and `id`
+- returns the document without internal fields such as `embedding` and `rawText`
 
 #### `query`
-- Supports `docType` filter
-- Supports dot-path equality filters (e.g., `{"state.status": "open"}`)
-- Supports `sortBy` (dot-path field name, default `"createdAt"`)
-- Supports `sortDesc` (boolean, default `true`)
-- Supports `limit` (integer, range 1-100, default 50; clamped to bounds)
-- Uses the caller `userId` partition
-- `null` filter values match documents where the field is undefined or null
-- Returns `{"results": [...], "total": <count>}`
+
+- supports `docType` filter
+- supports dot-path equality filters such as `{"state.status": "open"}`
+- supports `sortBy` with default `"createdAt"`
+- supports `sortDesc` with default `true`
+- supports `limit` in the range `1..100`, default `50`
+- uses the caller `userId` partition
+- `null` filter values match fields that are missing or null
+- this is the primary tool for operational views such as open tasks, active goals, or life-state dumps
+- returns `{"results": [...], "total": <count>}`
 
 #### `search`
-- Requires `query` (natural language search text)
-- Supports optional `docType` filter
-- Supports `topK` (integer, range 1-20, default 5; clamped to bounds)
-- Embeds the query text at runtime
-- Uses Cosmos vector search on `/embedding`
-- Returns ranked results with `score` (cosine similarity, higher = more similar)
-- Logs `hypotheticalQueries` at debug level when matched documents have them (search quality observability)
-- Never returns `embedding`, `rawText`, or `hypotheticalQueries`
+
+- requires `query` as natural language search text
+- supports optional `docType` filter
+- supports `topK` in the range `1..20`, default `5`
+- embeds the query text at runtime
+- uses Cosmos vector search on `/embedding`
+- searches only document classes intentionally embedded for semantic recall
+- returns ranked results with `score`
+- logs `hypotheticalQueries` at debug level when matched memory documents have them
+- never returns `embedding`, `rawText`, or `hypotheticalQueries`
 
 Example response shape:
 
@@ -372,7 +510,6 @@ Example response shape:
     {
       "id": "memory:abc-123",
       "docType": "memory",
-      "memoryType": "fact",
       "narrative": "The garage router password is admin/Netgear2024.",
       "contextTags": ["home", "network"],
       "aiMetadata": { "urgency": "low" },
@@ -386,23 +523,26 @@ Example response shape:
 ```
 
 #### `update`
-- Requires `id` (document ID) and `updates` (dict of fields to change)
-- Supports dot-path updates for nested fields (e.g., `{"state.status": "done"}` changes only `state.status`, preserving all other `state` fields)
-- Ignores immutable fields (`id`, `userId`, `docType`, `createdAt`, `embedding`)
-- Regenerates the embedding if `narrative` or `hypotheticalQueries` changes
-- Applies recurring-task completion logic when a recurring task is marked done (see Section 5, "Recurring task completion logic")
-- Returns `{"id": ..., "status": "updated", "updatedAt": ...}`
+
+- requires `id` and `updates`
+- supports dot-path updates for nested fields
+- ignores immutable fields
+- regenerates the embedding if `narrative` or `hypotheticalQueries` changes on an embedded document
+- applies recurring-task completion logic when a recurring task is marked done
+- returns `{"id": ..., "status": "updated", "updatedAt": ...}`
 
 #### `delete`
-- Hard deletes by `id` and `userId`
+
+- hard deletes by `id` and `userId`
 
 #### `raw_query`
-- Read-only Cosmos SQL only (no DELETE, UPDATE, or INSERT)
-- The client SQL **must** include `c.userId = @userId` in the WHERE clause
-- The server injects the `@userId` parameter automatically — clients must not include it in the `parameters` list
-- Client may supply additional parameters via the `parameters` list (e.g., `[{"name": "@status", "value": "open"}]`)
-- Results are capped at 100 items
-- Returns sanitized results without `embedding` or `rawText`
+
+- read-only Cosmos SQL only
+- client SQL must include `c.userId = @userId` in the `WHERE` clause
+- the server injects the `@userId` parameter automatically
+- clients may supply additional parameters
+- results are capped at `100`
+- results are sanitized to remove `embedding` and `rawText`
 
 ## 8. Configuration
 
@@ -450,10 +590,10 @@ PORT=8000
 ### Auth stance
 
 Current implementation target:
-- Dev mode may use `DISABLE_AUTH=true`
-- Hosted production should move toward managed identity and secretless access where possible
+- dev mode may use `DISABLE_AUTH=true`
+- hosted production should move toward managed identity and secretless access where possible
 
-The first secure hardening target after MVP is:
+First hardening targets after MVP:
 1. managed identity for Azure-hosted workloads
 2. Key Vault or managed secret references
 3. removal of raw API keys from app env vars where Azure supports it
@@ -466,7 +606,7 @@ The first secure hardening target after MVP is:
 |---|---|---|
 | Resource Group | `rg-openbrain-{env}` | Per-environment |
 | Log Analytics Workspace | `log-openbrain-{env}` | Required by Container Apps environment |
-| Container Registry | `openbrain{env}{suffix}` | Globally unique; Basic SKU in current bootstrap |
+| Container Registry | Shared services ACR | Pre-existing shared resource, not provisioned by this repo |
 | Container Apps Environment | `openbrain-env-{env}` | Shared hosted environment |
 | Cosmos DB Account | `openbrain-cosmos-{env}-{suffix}` | Serverless by default |
 | Foundry resource | `ob{env}{suffix}` | `Microsoft.CognitiveServices/accounts`, kind `AIServices` |
@@ -476,60 +616,48 @@ The first secure hardening target after MVP is:
 ### Hosting requirements
 
 - Container App listens on port `8000`
-- Ingress target port must be `8000`
+- ingress target port must be `8000`
 - MCP endpoint path is `/mcp`
-- Min replicas can be `0` for cost efficiency
-- Max replicas can start at `1` for MVP and be raised later
+- min replicas can be `0`
+- max replicas can start at `1`
 
 ### Foundry resource provisioning
 
-The canonical IaC model is:
+Canonical IaC model:
 - `Microsoft.CognitiveServices/accounts`
 - `Microsoft.CognitiveServices/accounts/projects`
 
-The Foundry resource and project are provisioned separately from model deployments.
-
-Model deployment creation is an explicit step and must not be assumed to exist automatically.
+The Foundry resource and project are provisioned separately from model deployments. Model deployment creation is an explicit step and must not be assumed to exist automatically.
 
 ### Deployment workflow
 
 Required deployment order:
 
-1. Provision Azure infrastructure.
-2. Run `az deployment group what-if` before any Bicep `create` step.
-3. Create or validate the `text-embedding-3-large` model deployment on the Foundry resource.
-4. Build and push the container image.
-5. Create or update the Container App.
-6. Apply secrets and environment variables after the Container App exists.
-7. Smoke test the hosted `/mcp` endpoint.
+1. Validate infrastructure changes with `az deployment group what-if`.
+2. Provision Azure infrastructure owned by this repo: resource group, Log Analytics, Container Apps environment, serverless Cosmos account and container, Foundry resource and project, and the Container App.
+3. Reuse the shared-services ACR instead of creating a new registry in this repo's resource group.
+4. Create the `text-embedding-3-large` model deployment on the Foundry resource if it does not already exist.
+5. Build and push the container image to the shared ACR.
+6. Create or update the Container App.
+7. Apply secrets and environment variables after the Container App exists.
+8. Smoke test the hosted `/mcp` endpoint.
 
 ### Deployment scripts
 
 | Script | Purpose |
 |---|---|
 | `deployment/common.ps1` | Shared Azure CLI helpers and deployment state management |
-| `deployment/setup-infrastructure.ps1` | Resource group, Log Analytics, ACR, Container Apps environment, serverless Cosmos, vector-enabled container, optional Foundry resource/project |
-| `deployment/deploy.ps1` | Build image in ACR and create/update the Container App |
+| `deployment/setup-infrastructure.ps1` | Resource group, Log Analytics, Container Apps environment, serverless Cosmos, vector-enabled container, and Foundry resource and project |
+| `deployment/deploy.ps1` | Build image in the shared ACR and create or update the Container App |
 | `deployment/set-env-vars.ps1` | Set Container App secrets and env vars; validate embedding deployment exists |
 
 ### Operational requirements
 
 - Cosmos account mode defaults to `serverless`
 - Cosmos vector capability must be enabled before container creation
-- Foundry model deployment must exist before app secrets/env vars are applied
-- Deployment validation must include a preflight step, not only best-effort create/update
-
-### Security notes
-
-Current bootstrap is acceptable for dev:
-- Cosmos key injected as Container App secret
-- Foundry key injected as Container App secret
-
-Preferred production hardening path:
-- managed identity for data-plane access where supported
-- Key Vault-backed secret management
-- remove ACR admin credential dependency
-- restrict public network access where feasible
+- Foundry model deployment must exist before app secrets and env vars are applied
+- shared ACR lives outside this resource group's ownership and is treated as an input dependency
+- deployment validation must include a preflight step, not only best-effort create or update
 
 ## 10. Error Handling
 
@@ -537,17 +665,17 @@ Preferred production hardening path:
 
 All custom exceptions inherit from a single base class:
 
-```
-OpenBrainError                          # Base exception for all Open Brain errors
-├── CosmosDBError                       # Error during Cosmos DB operations
-├── EmbeddingError                      # Error during embedding generation
-├── DocumentNotFoundError               # Requested document does not exist
-├── ValidationError                     # Document data validation failed
-├── AuthenticationError                 # Authentication failed
-└── ConfigurationError                  # Invalid configuration
+```text
+OpenBrainError
+|- CosmosDBError
+|- EmbeddingError
+|- DocumentNotFoundError
+|- ValidationError
+|- AuthenticationError
+\- ConfigurationError
 ```
 
-The tool layer catches all exceptions and returns `{"error": ...}` — errors never propagate to the MCP transport.
+The tool layer catches all exceptions and returns `{"error": ...}`. Errors never propagate to the MCP transport.
 
 ### Response shape
 
@@ -573,81 +701,30 @@ Validation errors can include details:
 Use mocked Cosmos and embedding clients to validate:
 - model validation and defaults
 - document write behavior
-- update merge logic
-- recurring task completion behavior
-- search response sanitization
-- search score pass-through semantics
-- raw query sanitization
+- update behavior
+- recurring-task completion logic
+- embedding generation and HyDE averaging
+- search result sanitization
 
 ### Integration tests
 
-Use a real Azure dev subscription because the local emulator does not support the hosted vector-search path needed here.
+Use a real test environment when available to validate:
+- Cosmos container policy compatibility
+- vector search query behavior
+- Foundry embedding calls
+- MCP transport behavior over both `stdio` and HTTP
 
-Integration coverage target:
-- vector-enabled container creation
-- write + search round trip
-- recurring task update
-- hosted Container App `/mcp` reachability
-- env var and secret injection
+### Deployment validation
 
-### Deployment smoke tests
+Each environment rollout should validate:
+- Bicep compilation
+- `az deployment group what-if`
+- infrastructure provisioning
+- model deployment existence
+- Container App health
+- `/mcp` endpoint smoke test
 
-After each hosted deployment:
-1. confirm the Container App revision is healthy
-2. confirm `/mcp` responds
-3. write one memory
-4. search for it semantically
-5. confirm returned results exclude `embedding`
+## 12. Outstanding Decisions
 
-## 12. Implementation Order
-
-### Phase 1: Server correctness
-
-1. Finalize the runtime client shape for OpenAI v1 against the Foundry endpoint.
-2. Fix vector score handling so the server passes through Cosmos score semantics directly.
-3. Align container indexing policy with the documented vector policy.
-4. Ensure tool responses strip internal fields consistently.
-
-### Phase 2: Deployment correctness
-
-1. Add `what-if` preflight for Bicep-backed deployment steps.
-2. Add model deployment creation or validation automation.
-3. Tighten Container App deployment and secret wiring.
-4. Add smoke-test commands for hosted verification.
-
-### Phase 3: Agent integration
-
-1. Point triage and cleanup agents at the hosted MCP endpoint.
-2. Validate end-to-end write/search workflows from an external agent.
-3. Add operational docs for recurring runs and cleanup jobs.
-
-## 13. Appendix: Canonical Cosmos Search Query
-
-```sql
-SELECT TOP @topK
-    c.id,
-    c.docType,
-    c.narrative,
-    c.contextTags,
-    c.aiMetadata,
-    c.createdAt,
-    c.updatedAt,
-    c.memoryType,
-    c.taskType,
-    c.state,
-    c.supersededBy,
-    c.triageAttempt,
-    c.resolvedAt,
-    c.resolution,
-    c.hypotheticalQueries,
-    VectorDistance(c.embedding, @queryVector) AS score
-FROM c
-WHERE c.userId = @userId
-ORDER BY VectorDistance(c.embedding, @queryVector)
-```
-
-Server response requirements for search:
-- strip `embedding`
-- strip `rawText`
-- strip `hypotheticalQueries`
-- expose the Cosmos vector score as `score`
+The following items are still intentionally open:
+- whether goals need additional structured fields beyond `GoalState`
