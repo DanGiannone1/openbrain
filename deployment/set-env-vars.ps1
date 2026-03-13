@@ -50,11 +50,11 @@ $cosmosKey = Invoke-AzTsv -Arguments @(
 )
 
 if (-not $AiResourceName) {
-    if ($state.ContainsKey("aiFoundryName") -and $state.aiFoundryName) {
-        $AiResourceName = [string]$state.aiFoundryName
-    }
-    elseif ($state.ContainsKey("aiServicesName") -and $state.aiServicesName) {
+    if ($state.ContainsKey("aiServicesName") -and $state.aiServicesName) {
         $AiResourceName = [string]$state.aiServicesName
+    }
+    elseif ($state.ContainsKey("aiFoundryName") -and $state.aiFoundryName) {
+        $AiResourceName = [string]$state.aiFoundryName
     }
     else {
         throw "No AI resource name supplied and none is recorded in deployment state."
@@ -75,14 +75,14 @@ $aiEndpoint = Try-Get-AzTsv -Arguments @(
     "cognitiveservices", "account", "show",
     "--resource-group", $resourceGroup,
     "--name", $AiResourceName,
-    "--query", 'properties.endpoints."Azure AI Model Inference API"'
+    "--query", "properties.endpoint"
 )
 if (-not $aiEndpoint) {
     $aiEndpoint = Try-Get-AzTsv -Arguments @(
         "cognitiveservices", "account", "show",
         "--resource-group", $resourceGroup,
         "--name", $AiResourceName,
-        "--query", "properties.endpoint"
+        "--query", "properties.endpoints['Azure AI Model Inference API']"
     )
 }
 if (-not $aiEndpoint) {
@@ -106,6 +106,42 @@ $aiKey = Invoke-AzTsv -Arguments @(
     "--name", $AiResourceName,
     "--query", "key1"
 )
+
+Write-Step "Ensuring system-assigned managed identity on Container App $appName"
+& az containerapp identity assign `
+    --resource-group $resourceGroup `
+    --name $appName `
+    --system-assigned `
+    --output none
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to assign a system-managed identity to Container App '$appName'."
+}
+
+$containerAppPrincipalId = Invoke-AzTsv -Arguments @(
+    "containerapp", "show",
+    "--resource-group", $resourceGroup,
+    "--name", $appName,
+    "--query", "identity.principalId"
+)
+if (-not $containerAppPrincipalId) {
+    throw "Container App '$appName' does not expose a managed identity principal id."
+}
+
+$aiResourceId = Invoke-AzTsv -Arguments @(
+    "cognitiveservices", "account", "show",
+    "--resource-group", $resourceGroup,
+    "--name", $AiResourceName,
+    "--query", "id"
+)
+if (-not $aiResourceId) {
+    throw "Unable to resolve Azure OpenAI resource id for '$AiResourceName'."
+}
+
+Write-Step "Ensuring Container App identity can access Azure OpenAI resource $AiResourceName"
+Ensure-RoleAssignment `
+    -PrincipalObjectId $containerAppPrincipalId `
+    -RoleName "Cognitive Services OpenAI User" `
+    -Scope $aiResourceId
 
 $OpenBrainApiToken = if ($OpenBrainApiToken) {
     $OpenBrainApiToken
@@ -160,6 +196,7 @@ Set-StateValues -State $state -Updates @{
     aiServicesName = $AiResourceName
     aiServicesEndpoint = $aiEndpoint.TrimEnd("/")
     embeddingDeployment = $EmbeddingDeployment
+    containerAppPrincipalId = $containerAppPrincipalId
     openBrainApiToken = $OpenBrainApiToken
     disableAuth = $DisableAuth
     defaultUserId = $DefaultUserId

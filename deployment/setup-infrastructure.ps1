@@ -26,7 +26,9 @@ param(
     [string]$EmbeddingDeploymentName = "text-embedding-3-large",
     [string]$EmbeddingModelName = "text-embedding-3-large",
     [string]$EmbeddingResourceName,
-    [string]$EmbeddingResourceLocation = "eastus2"
+    [string]$EmbeddingResourceLocation = "eastus2",
+    [string]$EmbeddingDeploymentSkuName = "GlobalStandard",
+    [int]$EmbeddingDeploymentSkuCapacity = 10
 )
 
 . (Join-Path $PSScriptRoot "common.ps1")
@@ -58,7 +60,8 @@ function Get-PreferredModelSpec {
     param(
         [string]$ResourceGroupName,
         [string]$AccountName,
-        [string]$ModelName
+        [string]$ModelName,
+        [string]$RequiredSkuName
     )
 
     $models = @(Invoke-AzJson -Arguments @(
@@ -77,7 +80,7 @@ function Get-PreferredModelSpec {
 
     $preferred = @($matching | Where-Object { $_.format -eq "OpenAI" })
     if (-not $preferred.Count) {
-        $preferred = $matching
+        throw "Model '$ModelName' is not available in OpenAI format on '$AccountName'."
     }
 
     $selected = $preferred |
@@ -89,15 +92,12 @@ function Get-PreferredModelSpec {
         throw "Model '$ModelName' on '$AccountName' does not advertise any deployable SKUs."
     }
 
-    $sku = $skus |
-        Sort-Object -Property @{ Expression = {
-            switch ($_.name) {
-                "GlobalStandard" { 3 }
-                "Standard" { 2 }
-                default { 1 }
-            }
-        } ; Descending = $true } |
-        Select-Object -First 1
+    $sku = @($skus | Where-Object { $_.name -eq $RequiredSkuName } | Select-Object -First 1)
+    if (-not $sku) {
+        $availableSkus = ($skus | ForEach-Object { $_.name }) -join ", "
+        throw "Model '$ModelName' on '$AccountName' does not support required SKU '$RequiredSkuName'. Available SKUs: $availableSkus"
+    }
+    $sku = $sku[0]
 
     return @{
         name = [string]$selected.name
@@ -113,21 +113,57 @@ function Ensure-EmbeddingDeployment {
         [string]$ResourceGroupName,
         [string]$AccountName,
         [string]$DeploymentName,
-        [string]$ModelName
+        [string]$ModelName,
+        [string]$RequiredSkuName,
+        [int]$SkuCapacity
     )
 
-    $existingDeployment = Try-Get-AzTsv -Arguments @(
-        "cognitiveservices", "account", "deployment", "show",
-        "--resource-group", $ResourceGroupName,
-        "--name", $AccountName,
-        "--deployment-name", $DeploymentName,
-        "--query", "id"
-    )
-    if ($existingDeployment) {
-        return
+    $modelSpec = Get-PreferredModelSpec `
+        -ResourceGroupName $ResourceGroupName `
+        -AccountName $AccountName `
+        -ModelName $ModelName `
+        -RequiredSkuName $RequiredSkuName
+
+    $existingDeployment = $null
+    try {
+        $existingDeployment = Invoke-AzJson -Arguments @(
+            "cognitiveservices", "account", "deployment", "show",
+            "--resource-group", $ResourceGroupName,
+            "--name", $AccountName,
+            "--deployment-name", $DeploymentName
+        )
     }
+    catch {
+        $existingDeployment = $null
+    }
+    if ($existingDeployment) {
+        $existingModelName = [string]$existingDeployment.properties.model.name
+        $existingModelVersion = [string]$existingDeployment.properties.model.version
+        $existingModelFormat = [string]$existingDeployment.properties.model.format
+        $existingSkuName = [string]$existingDeployment.sku.name
+        $existingCapacity = if ($existingDeployment.sku.capacity) { [int]$existingDeployment.sku.capacity } else { 0 }
 
-    $modelSpec = Get-PreferredModelSpec -ResourceGroupName $ResourceGroupName -AccountName $AccountName -ModelName $ModelName
+        $needsReplacement = (
+            $existingModelName -ne $modelSpec.name -or
+            $existingModelVersion -ne $modelSpec.version -or
+            $existingModelFormat -ne $modelSpec.format -or
+            $existingSkuName -ne $RequiredSkuName -or
+            $existingCapacity -ne $SkuCapacity
+        )
+        if (-not $needsReplacement) {
+            return
+        }
+
+        Write-Step "Replacing embedding deployment $DeploymentName on $AccountName to match required model/SKU configuration"
+        & az cognitiveservices account deployment delete `
+            --resource-group $ResourceGroupName `
+            --name $AccountName `
+            --deployment-name $DeploymentName `
+            --output none
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to delete non-conforming embedding deployment '$DeploymentName' on '$AccountName'."
+        }
+    }
 
     Write-Step "Creating embedding deployment $DeploymentName on $AccountName"
     & az cognitiveservices account deployment create `
@@ -137,8 +173,8 @@ function Ensure-EmbeddingDeployment {
         --model-name $modelSpec.name `
         --model-version $modelSpec.version `
         --model-format $modelSpec.format `
-        --sku-capacity $modelSpec.skuCapacity `
-        --sku-name $modelSpec.skuName `
+        --sku-capacity $SkuCapacity `
+        --sku-name $RequiredSkuName `
         --output none
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to create embedding deployment '$DeploymentName' on '$AccountName'."
@@ -210,6 +246,10 @@ Set-StateValues -State $state -Updates @{
     cosmosContainer = $CosmosContainer
     cosmosMode = $CosmosMode
     embeddingDeployment = $EmbeddingDeploymentName
+    embeddingModelName = $EmbeddingModelName
+    embeddingDeploymentSkuName = $EmbeddingDeploymentSkuName
+    embeddingResourceName = $EmbeddingResourceName
+    embeddingResourceLocation = $EmbeddingResourceLocation
 }
 
 Ensure-ResourceGroup -Name $ResourceGroup -Location $Location
@@ -544,86 +584,66 @@ if ($CreateFoundryProject) {
     }
 }
 
-$embeddingAccountName = ""
-$embeddingAccountResourceGroup = $ResourceGroup
-$foundryAccountName = if ($state.ContainsKey("aiFoundryName") -and $state.aiFoundryName) {
-    [string]$state.aiFoundryName
-}
-else {
-    ""
-}
-
-if ($foundryAccountName) {
-    try {
-        Get-PreferredModelSpec `
-            -ResourceGroupName $ResourceGroup `
-            -AccountName $foundryAccountName `
-            -ModelName $EmbeddingModelName | Out-Null
-
-        $embeddingAccountName = $foundryAccountName
-        $foundryAccount = Invoke-AzJson -Arguments @(
-            "cognitiveservices", "account", "show",
-            "--resource-group", $ResourceGroup,
-            "--name", $foundryAccountName
-        )
-        Set-StateValues -State $state -Updates @{
-            aiServicesName = $foundryAccountName
-            aiServicesId = [string]$foundryAccount.id
-            aiServicesEndpoint = [string]$foundryAccount.properties.endpoint
-            aiServicesKind = [string]$foundryAccount.kind
-        }
-    }
-    catch {
-        Write-Host "Embedding model '$EmbeddingModelName' is unavailable on Foundry account '$foundryAccountName'. Falling back to a dedicated Azure OpenAI resource." -ForegroundColor Yellow
+Write-Step "Ensuring Azure OpenAI embedding resource $EmbeddingResourceName"
+$embeddingAccountId = Try-Get-AzTsv -Arguments @(
+    "cognitiveservices", "account", "show",
+    "--resource-group", $ResourceGroup,
+    "--name", $EmbeddingResourceName,
+    "--query", "id"
+)
+if (-not $embeddingAccountId) {
+    & az cognitiveservices account create `
+        --name $EmbeddingResourceName `
+        --resource-group $ResourceGroup `
+        --kind OpenAI `
+        --sku S0 `
+        --location $EmbeddingResourceLocation `
+        --assign-identity `
+        --custom-domain $EmbeddingResourceName `
+        --yes `
+        --output none
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create Azure OpenAI embedding resource '$EmbeddingResourceName'."
     }
 }
 
-if (-not $embeddingAccountName) {
-    Write-Step "Ensuring Azure OpenAI embedding resource $EmbeddingResourceName"
-    $embeddingAccountId = Try-Get-AzTsv -Arguments @(
-        "cognitiveservices", "account", "show",
-        "--resource-group", $ResourceGroup,
-        "--name", $EmbeddingResourceName,
-        "--query", "id"
-    )
-    if (-not $embeddingAccountId) {
-        & az cognitiveservices account create `
-            --name $EmbeddingResourceName `
-            --resource-group $ResourceGroup `
-            --kind OpenAI `
-            --sku S0 `
-            --location $EmbeddingResourceLocation `
-            --assign-identity `
-            --custom-domain $EmbeddingResourceName `
-            --yes `
-            --output none
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create Azure OpenAI embedding resource '$EmbeddingResourceName'."
-        }
-    }
-
-    $embeddingAccount = Invoke-AzJson -Arguments @(
-        "cognitiveservices", "account", "show",
-        "--resource-group", $ResourceGroup,
-        "--name", $EmbeddingResourceName
-    )
-    $embeddingAccountName = [string]$embeddingAccount.name
-    Set-StateValues -State $state -Updates @{
-        aiServicesName = $embeddingAccountName
-        aiServicesId = [string]$embeddingAccount.id
-        aiServicesEndpoint = [string]$embeddingAccount.properties.endpoint
-        aiServicesKind = [string]$embeddingAccount.kind
-        aiServicesLocation = [string]$embeddingAccount.location
+$embeddingIdentityType = Try-Get-AzTsv -Arguments @(
+    "cognitiveservices", "account", "show",
+    "--resource-group", $ResourceGroup,
+    "--name", $EmbeddingResourceName,
+    "--query", "identity.type"
+)
+if ($embeddingIdentityType -ne "SystemAssigned") {
+    Write-Step "Ensuring system-assigned managed identity on Azure OpenAI resource $EmbeddingResourceName"
+    & az cognitiveservices account identity assign `
+        --resource-group $ResourceGroup `
+        --name $EmbeddingResourceName `
+        --output none
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to assign a system-managed identity to Azure OpenAI resource '$EmbeddingResourceName'."
     }
 }
 
-if ($embeddingAccountName) {
-    Ensure-EmbeddingDeployment `
-        -ResourceGroupName $embeddingAccountResourceGroup `
-        -AccountName $embeddingAccountName `
-        -DeploymentName $EmbeddingDeploymentName `
-        -ModelName $EmbeddingModelName
+$embeddingAccount = Invoke-AzJson -Arguments @(
+    "cognitiveservices", "account", "show",
+    "--resource-group", $ResourceGroup,
+    "--name", $EmbeddingResourceName
+)
+Set-StateValues -State $state -Updates @{
+    aiServicesName = [string]$embeddingAccount.name
+    aiServicesId = [string]$embeddingAccount.id
+    aiServicesEndpoint = [string]$embeddingAccount.properties.endpoint
+    aiServicesKind = [string]$embeddingAccount.kind
+    aiServicesLocation = [string]$embeddingAccount.location
 }
+
+Ensure-EmbeddingDeployment `
+    -ResourceGroupName $ResourceGroup `
+    -AccountName ([string]$embeddingAccount.name) `
+    -DeploymentName $EmbeddingDeploymentName `
+    -ModelName $EmbeddingModelName `
+    -RequiredSkuName $EmbeddingDeploymentSkuName `
+    -SkuCapacity $EmbeddingDeploymentSkuCapacity
 
 Save-DeploymentState -Environment $Environment -State $state
 

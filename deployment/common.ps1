@@ -239,3 +239,33 @@ function Ensure-ResourceGroup {
         throw "Failed to create resource group $Name."
     }
 }
+
+function Ensure-RoleAssignment {
+    param(
+        [Parameter(Mandatory = $true)][string]$PrincipalObjectId,
+        [Parameter(Mandatory = $true)][string]$RoleName,
+        [Parameter(Mandatory = $true)][string]$Scope,
+        [string]$PrincipalType = "ServicePrincipal"
+    )
+
+    $assignmentId = Try-Get-AzTsv -Arguments @(
+        "role", "assignment", "list",
+        "--assignee-object-id", $PrincipalObjectId,
+        "--scope", $Scope,
+        "--role", $RoleName,
+        "--query", "[0].id"
+    )
+    if ($assignmentId) {
+        return
+    }
+
+    & az role assignment create `
+        --assignee-object-id $PrincipalObjectId `
+        --assignee-principal-type $PrincipalType `
+        --role $RoleName `
+        --scope $Scope `
+        --output none
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to assign role '$RoleName' to principal '$PrincipalObjectId' at scope '$Scope'."
+    }
+}

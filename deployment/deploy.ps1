@@ -119,17 +119,34 @@ else {
     }
 }
 
+Write-Step "Ensuring system-assigned managed identity on Container App $appName"
+& az containerapp identity assign `
+    --resource-group $resourceGroup `
+    --name $appName `
+    --system-assigned `
+    --output none
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to assign a system-managed identity to Container App '$appName'."
+}
+
 $fqdn = Invoke-AzTsv -Arguments @(
     "containerapp", "show",
     "--resource-group", $resourceGroup,
     "--name", $appName,
     "--query", "properties.configuration.ingress.fqdn"
 )
+$principalId = Invoke-AzTsv -Arguments @(
+    "containerapp", "show",
+    "--resource-group", $resourceGroup,
+    "--name", $appName,
+    "--query", "identity.principalId"
+)
 
 Set-StateValues -State $state -Updates @{
     lastImageTag = $ImageTag
     lastImage = $image
     containerAppFqdn = $fqdn
+    containerAppPrincipalId = $principalId
 }
 Save-DeploymentState -Environment $Environment -State $state
 
