@@ -5,8 +5,9 @@ param(
     [string]$SubscriptionId,
     [string]$AiResourceName,
     [string]$EmbeddingDeployment = "text-embedding-3-large",
-    [bool]$DisableAuth = $true,
+    [bool]$DisableAuth = $false,
     [string]$DefaultUserId = "dev-user",
+    [string]$OpenBrainApiToken,
     [string]$LogLevel = "INFO",
     [int]$Port = 8000
 )
@@ -50,13 +51,13 @@ $cosmosKey = Invoke-AzTsv -Arguments @(
 
 if (-not $AiResourceName) {
     if ($state.ContainsKey("aiFoundryName") -and $state.aiFoundryName) {
-        $AiResourceName = $state.aiFoundryName
+        $AiResourceName = [string]$state.aiFoundryName
     }
     elseif ($state.ContainsKey("aiServicesName") -and $state.aiServicesName) {
-        $AiResourceName = $state.aiServicesName
+        $AiResourceName = [string]$state.aiServicesName
     }
     else {
-        throw "No AI resource name supplied and no Foundry-backed AI Services resource is recorded in deployment state."
+        throw "No AI resource name supplied and none is recorded in deployment state."
     }
 }
 
@@ -88,16 +89,6 @@ if (-not $aiEndpoint) {
     throw "Unable to determine an inference endpoint for AI resource '$AiResourceName'."
 }
 
-$aiResourceId = Try-Get-AzTsv -Arguments @(
-    "cognitiveservices", "account", "show",
-    "--resource-group", $resourceGroup,
-    "--name", $AiResourceName,
-    "--query", "id"
-)
-if (-not $aiResourceId) {
-    throw "AI resource '$AiResourceName' was not found in resource group '$resourceGroup'."
-}
-
 $embeddingDeploymentId = Try-Get-AzTsv -Arguments @(
     "cognitiveservices", "account", "deployment", "show",
     "--resource-group", $resourceGroup,
@@ -105,9 +96,8 @@ $embeddingDeploymentId = Try-Get-AzTsv -Arguments @(
     "--deployment-name", $EmbeddingDeployment,
     "--query", "id"
 )
-$aiEndpoint = $aiEndpoint.TrimEnd("/")
 if (-not $embeddingDeploymentId) {
-    throw "Embedding deployment '$EmbeddingDeployment' does not exist on AI resource '$AiResourceName'. Deploy the model first, then rerun deployment/set-env-vars.ps1."
+    throw "Embedding deployment '$EmbeddingDeployment' does not exist on '$AiResourceName'."
 }
 
 $aiKey = Invoke-AzTsv -Arguments @(
@@ -117,6 +107,19 @@ $aiKey = Invoke-AzTsv -Arguments @(
     "--query", "key1"
 )
 
+$OpenBrainApiToken = if ($OpenBrainApiToken) {
+    $OpenBrainApiToken
+}
+elseif ($env:OPENBRAIN_API_TOKEN) {
+    [string]([Environment]::GetEnvironmentVariable("OPENBRAIN_API_TOKEN"))
+}
+elseif ($state.ContainsKey("openBrainApiToken") -and $state.openBrainApiToken) {
+    [string]$state.openBrainApiToken
+}
+else {
+    [Guid]::NewGuid().ToString("N")
+}
+
 Write-Step "Setting Container App secrets"
 & az containerapp secret set `
     --resource-group $resourceGroup `
@@ -124,6 +127,7 @@ Write-Step "Setting Container App secrets"
     --secrets `
     "cosmos-key=$cosmosKey" `
     "ai-foundry-api-key=$aiKey" `
+    "openbrain-api-token=$OpenBrainApiToken" `
     --output none
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to update Container App secrets."
@@ -138,11 +142,12 @@ Write-Step "Setting Container App environment variables"
     "COSMOS_KEY=secretref:cosmos-key" `
     "COSMOS_DATABASE=$cosmosDatabase" `
     "COSMOS_CONTAINER=$cosmosContainer" `
-    "AI_FOUNDRY_ENDPOINT=$aiEndpoint" `
+    "AI_FOUNDRY_ENDPOINT=$($aiEndpoint.TrimEnd('/'))" `
     "AI_FOUNDRY_API_KEY=secretref:ai-foundry-api-key" `
     "AI_FOUNDRY_EMBEDDING_DEPLOYMENT=$EmbeddingDeployment" `
     "DISABLE_AUTH=$($DisableAuth.ToString().ToLowerInvariant())" `
     "DEFAULT_USER_ID=$DefaultUserId" `
+    "OPENBRAIN_API_TOKEN=secretref:openbrain-api-token" `
     "ENVIRONMENT=$Environment" `
     "LOG_LEVEL=$LogLevel" `
     "PORT=$Port" `
@@ -153,8 +158,11 @@ if ($LASTEXITCODE -ne 0) {
 
 Set-StateValues -State $state -Updates @{
     aiServicesName = $AiResourceName
-    aiServicesEndpoint = $aiEndpoint
+    aiServicesEndpoint = $aiEndpoint.TrimEnd("/")
     embeddingDeployment = $EmbeddingDeployment
+    openBrainApiToken = $OpenBrainApiToken
+    disableAuth = $DisableAuth
+    defaultUserId = $DefaultUserId
 }
 Save-DeploymentState -Environment $Environment -State $state
 

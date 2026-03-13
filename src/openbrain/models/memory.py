@@ -1,11 +1,14 @@
 """Memory document model."""
 
 from typing import Literal
-from openbrain.models.common import BaseDocument
+
+from pydantic import Field
+
+from openbrain.models.common import ContentDocument
 
 
-class MemoryDocument(BaseDocument):
+class MemoryDocument(ContentDocument):
+    """Reference and factual recall documents."""
+
     docType: Literal["memory"] = "memory"
-    memoryType: Literal["fact", "idea"]
-    hypotheticalQueries: list[str] = []
-    supersededBy: str | None = None
+    hypotheticalQueries: list[str] = Field(default_factory=list)

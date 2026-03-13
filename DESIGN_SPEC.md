@@ -120,8 +120,8 @@ Important decisions:
 | `id` | `string` | Server | Format: `{docType}:{uuid4}` |
 | `userId` | `string` | Server | Partition key |
 | `docType` | `string` | Client | `memory`, `idea`, `task`, `goal`, `misc`, or `userSettings` |
-| `narrative` | `string` | Client | Main human-readable text used for embeddings |
-| `embedding` | `float[]` | Server | Never returned to clients |
+| `narrative` | `string` | Client | Main human-readable text. Required for content docs; not used by `userSettings`. |
+| `embedding` | `float[]` | Server | Present only on embedded document classes and never returned to clients |
 | `rawText` | `string` | Client optional | Original brain dump, stored but not returned |
 | `contextTags` | `string[]` | Client optional | Lightweight taxonomy tags such as `personal`, `soligence`, or `microsoft` |
 | `aiMetadata` | `AiMetadata` | Client optional | AI-generated metadata |

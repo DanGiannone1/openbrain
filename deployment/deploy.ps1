@@ -20,14 +20,19 @@ if (-not $state.Count) {
 
 $resourceGroup = $state.resourceGroup
 $acrName = $state.acrName
+$acrResourceGroup = $state.acrResourceGroup
 $containerAppEnv = $state.containerAppEnvironment
 $appName = $state.containerAppName
 $imagePrefix = $state.imagePrefix
 $repoRoot = Get-RepoRoot
 
-$ImageTag = if ($ImageTag) { $ImageTag } else { (Get-Date -Format "yyyyMMddHHmmss") }
+if (-not $acrName -or -not $acrResourceGroup) {
+    throw "Shared ACR details are missing from deployment state."
+}
 
-Write-Step "Building and pushing image ${imagePrefix}:$ImageTag to $acrName"
+$ImageTag = if ($ImageTag) { $ImageTag } else { Get-Date -Format "yyyyMMddHHmmss" }
+
+Write-Step "Building and pushing image ${imagePrefix}:$ImageTag to shared ACR $acrName"
 & az acr build `
     --registry $acrName `
     --image "${imagePrefix}:$ImageTag" `
@@ -35,24 +40,24 @@ Write-Step "Building and pushing image ${imagePrefix}:$ImageTag to $acrName"
     $repoRoot `
     --output none
 if ($LASTEXITCODE -ne 0) {
-    throw "Failed to build and push image to $acrName."
+    throw "Failed to build and push image to '$acrName'."
 }
 
 $acrLoginServer = Invoke-AzTsv -Arguments @(
     "acr", "show",
-    "--resource-group", $resourceGroup,
+    "--resource-group", $acrResourceGroup,
     "--name", $acrName,
     "--query", "loginServer"
 )
 $acrUser = Invoke-AzTsv -Arguments @(
     "acr", "credential", "show",
-    "--resource-group", $resourceGroup,
+    "--resource-group", $acrResourceGroup,
     "--name", $acrName,
     "--query", "username"
 )
 $acrPassword = Invoke-AzTsv -Arguments @(
     "acr", "credential", "show",
-    "--resource-group", $resourceGroup,
+    "--resource-group", $acrResourceGroup,
     "--name", $acrName,
     "--query", "passwords[0].value"
 )
@@ -88,7 +93,7 @@ if ($appId) {
         --max-replicas $MaxReplicas `
         --output none
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to update Container App $appName."
+        throw "Failed to update Container App '$appName'."
     }
 }
 else {
@@ -107,9 +112,10 @@ else {
         --registry-server $acrLoginServer `
         --registry-username $acrUser `
         --registry-password $acrPassword `
+        --env-vars "PORT=8000" `
         --output none
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to create Container App $appName."
+        throw "Failed to create Container App '$appName'."
     }
 }
 

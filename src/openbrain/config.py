@@ -1,7 +1,12 @@
-"""Configuration module for Open Brain MCP server."""
+"""Configuration module for the Open Brain MCP server."""
+
+from __future__ import annotations
 
 import os
+
 from dotenv import load_dotenv
+
+from openbrain.utils.errors import ConfigurationError
 
 env = os.getenv("ENVIRONMENT", "dev")
 env_file = f".env.{env}"
@@ -33,6 +38,7 @@ class Config:
     # Auth
     DISABLE_AUTH: bool = os.getenv("DISABLE_AUTH", "false").lower() == "true"
     DEFAULT_USER_ID: str = os.getenv("DEFAULT_USER_ID", "dev-user")
+    OPENBRAIN_API_TOKEN: str = os.getenv("OPENBRAIN_API_TOKEN", "")
 
     # Server
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
@@ -40,18 +46,27 @@ class Config:
 
     @classmethod
     def validate(cls) -> None:
-        """Validate required configuration."""
-        if not cls.COSMOS_HOST:
-            raise ValueError("COSMOS_HOST environment variable is required")
-        if not cls.COSMOS_KEY:
-            raise ValueError("COSMOS_KEY environment variable is required")
-        if not cls.AI_FOUNDRY_ENDPOINT:
-            raise ValueError("AI_FOUNDRY_ENDPOINT environment variable is required")
-        if not cls.AI_FOUNDRY_API_KEY:
-            raise ValueError("AI_FOUNDRY_API_KEY environment variable is required")
+        """Validate required configuration at import time."""
+
+        required = {
+            "COSMOS_HOST": cls.COSMOS_HOST,
+            "COSMOS_KEY": cls.COSMOS_KEY,
+            "AI_FOUNDRY_ENDPOINT": cls.AI_FOUNDRY_ENDPOINT,
+            "AI_FOUNDRY_API_KEY": cls.AI_FOUNDRY_API_KEY,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise ConfigurationError(f"Missing required environment variables: {', '.join(missing)}")
+
+        if not cls.DISABLE_AUTH and not cls.OPENBRAIN_API_TOKEN:
+            raise ConfigurationError(
+                "OPENBRAIN_API_TOKEN is required when DISABLE_AUTH is false."
+            )
 
     @classmethod
     def is_dev_mode(cls) -> bool:
+        """Return True when auth bypass is enabled."""
+
         return cls.DISABLE_AUTH
 
 

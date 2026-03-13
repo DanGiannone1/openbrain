@@ -1,66 +1,112 @@
-"""Document service — all CRUD, query, search, and update operations."""
+"""Document service: CRUD, query, search, and update operations."""
+
+from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from pydantic import ValidationError as PydanticValidationError
 
 from openbrain import cosmos_client
+from openbrain.models.goal import GoalDocument
+from openbrain.models.idea import IdeaDocument
 from openbrain.models.memory import MemoryDocument
+from openbrain.models.misc import MiscDocument
 from openbrain.models.task import TaskDocument
-from openbrain.models.review import ReviewDocument
-from openbrain.services.embedding_service import generate_embedding
-from openbrain.utils.errors import DocumentNotFoundError, ValidationError, EmbeddingError
+from openbrain.models.user_settings import UserSettingsDocument
+from openbrain.services.embedding_service import document_requires_embedding, generate_embedding
+from openbrain.utils.errors import DocumentNotFoundError, ValidationError
 
 logger = logging.getLogger("openbrain")
 
 DOC_TYPE_MODELS = {
     "memory": MemoryDocument,
+    "idea": IdeaDocument,
     "task": TaskDocument,
-    "review": ReviewDocument,
+    "goal": GoalDocument,
+    "misc": MiscDocument,
+    "userSettings": UserSettingsDocument,
 }
-
+QUERY_ONLY_DOC_TYPES = {"task", "goal", "misc", "userSettings"}
+SEARCHABLE_DOC_TYPES = {"memory", "idea"}
 IMMUTABLE_FIELDS = {"id", "userId", "docType", "createdAt", "embedding"}
 STRIP_FIELDS = {"embedding", "rawText", "_rid", "_self", "_etag", "_attachments", "_ts"}
 SEARCH_STRIP_FIELDS = STRIP_FIELDS | {"hypotheticalQueries"}
+WRITE_REQUIRES_NARRATIVE = {"memory", "idea", "task", "goal", "misc"}
+READ_ONLY_SQL_PATTERN = re.compile(r"\b(insert|update|delete|replace|upsert|create|drop|alter)\b", re.IGNORECASE)
 
 
 def _strip(doc: dict, extra_strip: set[str] | None = None) -> dict:
-    """Remove internal/sensitive fields from a document before returning to client."""
-    keys_to_strip = STRIP_FIELDS | (extra_strip or set())
-    return {k: v for k, v in doc.items() if k not in keys_to_strip}
+    """Remove internal and sensitive fields from a document."""
+
+    return {k: v for k, v in doc.items() if k not in (STRIP_FIELDS | (extra_strip or set()))}
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def write_document(user_id: str, document: dict) -> dict:
-    """Validate, generate ID/embedding/timestamps, write to Cosmos."""
-    doc_type = document.get("docType")
+def _validate_doc_type(doc_type: str | None) -> str:
     if not doc_type or doc_type not in DOC_TYPE_MODELS:
-        raise ValidationError("docType must be 'memory', 'task', or 'review'")
-    if not document.get("narrative"):
-        raise ValidationError("narrative is required")
+        supported = ", ".join(sorted(DOC_TYPE_MODELS))
+        raise ValidationError(f"docType must be one of: {supported}")
+    return doc_type
 
-    # Validate against Pydantic model
+
+def _normalize_tags(document: dict) -> None:
+    if "contextTags" not in document or document["contextTags"] is None:
+        return
+
+    tags: list[str] = []
+    seen: set[str] = set()
+    for tag in document["contextTags"]:
+        cleaned = str(tag).strip()
+        if not cleaned:
+            continue
+        lowered = cleaned.lower()
+        if lowered not in seen:
+            seen.add(lowered)
+            tags.append(lowered)
+    document["contextTags"] = tags
+
+
+def _model_validate(doc_type: str, payload: dict):
     model_cls = DOC_TYPE_MODELS[doc_type]
     try:
-        validated = model_cls.model_validate(document)
-    except PydanticValidationError as e:
-        details = [f"{err['loc']}: {err['msg']}" for err in e.errors()]
-        raise ValidationError(f"Validation error: {'; '.join(details)}")
+        return model_cls.model_validate(payload)
+    except PydanticValidationError as exc:
+        details = []
+        for err in exc.errors():
+            loc = ".".join(str(part) for part in err["loc"])
+            details.append(f"{loc}: {err['msg']}")
+        raise ValidationError("; ".join(details)) from exc
 
-    # Server-generated fields
+
+def _build_document_id(doc_type: str, user_id: str) -> str:
+    if doc_type == "userSettings":
+        return f"userSettings:{user_id}"
+    return f"{doc_type}:{uuid.uuid4()}"
+
+
+def write_document(user_id: str, document: dict) -> dict:
+    """Validate, generate server fields, and persist a new document."""
+
+    doc_type = _validate_doc_type(document.get("docType"))
+    if doc_type in WRITE_REQUIRES_NARRATIVE and not str(document.get("narrative", "")).strip():
+        raise ValidationError("narrative is required")
+
+    payload = dict(document)
+    _normalize_tags(payload)
+
+    validated = _model_validate(doc_type, payload)
     doc = validated.model_dump()
-    doc["id"] = f"{doc_type}:{uuid.uuid4()}"
-    doc["userId"] = user_id
     now = _now_iso()
+    doc["id"] = _build_document_id(doc_type, user_id)
+    doc["userId"] = user_id
     doc["createdAt"] = now
     doc["updatedAt"] = now
-
-    # Generate embedding
     doc["embedding"] = generate_embedding(doc)
 
     cosmos_client.create_item(doc)
@@ -68,7 +114,8 @@ def write_document(user_id: str, document: dict) -> dict:
 
 
 def read_document(user_id: str, doc_id: str) -> dict:
-    """Read a document by ID."""
+    """Read a single document and sanitize it for clients."""
+
     doc = cosmos_client.read_item(doc_id, user_id)
     return _strip(doc)
 
@@ -81,7 +128,8 @@ def query_documents(
     sort_desc: bool = True,
     limit: int = 50,
 ) -> dict:
-    """Query documents with structured filters."""
+    """Query documents with structured filters and dot-path support."""
+
     limit = max(1, min(limit, 100))
 
     conditions = ["c.userId = @userId"]
@@ -89,124 +137,153 @@ def query_documents(
     param_idx = 0
 
     if doc_type:
+        _validate_doc_type(doc_type)
         conditions.append("c.docType = @docType")
         params.append({"name": "@docType", "value": doc_type})
 
-    if filters:
-        for key, value in filters.items():
-            if value is None:
-                conditions.append(f"(NOT IS_DEFINED(c.{key}) OR IS_NULL(c.{key}))")
-            else:
-                param_name = f"@p{param_idx}"
-                conditions.append(f"c.{key} = {param_name}")
-                params.append({"name": param_name, "value": value})
-                param_idx += 1
+    for key, value in (filters or {}).items():
+        if value is None:
+            conditions.append(f"(NOT IS_DEFINED(c.{key}) OR IS_NULL(c.{key}))")
+            continue
+        param_name = f"@p{param_idx}"
+        conditions.append(f"c.{key} = {param_name}")
+        params.append({"name": param_name, "value": value})
+        param_idx += 1
 
-    where = " AND ".join(conditions)
+    where_clause = " AND ".join(conditions)
     direction = "DESC" if sort_desc else "ASC"
-    sql = f"SELECT * FROM c WHERE {where} ORDER BY c.{sort_by} {direction}"
+    sql = f"SELECT * FROM c WHERE {where_clause} ORDER BY c.{sort_by} {direction}"
 
     results = cosmos_client.query_items(sql, params, partition_key=user_id, max_item_count=limit)
-    stripped = [_strip(doc) for doc in results]
+    stripped = [_strip(doc) for doc in results[:limit]]
     return {"results": stripped, "total": len(stripped)}
 
 
-def search_documents(
-    user_id: str,
-    query_text: str,
-    doc_type: str | None = None,
-    top_k: int = 5,
-) -> dict:
-    """Vector similarity search."""
+def search_documents(user_id: str, query_text: str, doc_type: str | None = None, top_k: int = 5) -> dict:
+    """Execute semantic search over embedded documents."""
+
     from openbrain.embedding import embed_text
+
+    query_text = query_text.strip()
+    if not query_text:
+        raise ValidationError("query is required")
+
+    if doc_type:
+        _validate_doc_type(doc_type)
+        if doc_type not in SEARCHABLE_DOC_TYPES:
+            raise ValidationError("search only supports embedded document types: memory, idea")
 
     top_k = max(1, min(top_k, 20))
     query_vector = embed_text(query_text)
-
     results = cosmos_client.vector_search(query_vector, user_id, doc_type, top_k)
 
-    # Pass through Cosmos VectorDistance score and log hypotheticalQueries for search quality
     processed = []
     for doc in results:
-        score = doc.pop("score", 0)
-
+        score = doc.pop("score", None)
         hyp_queries = doc.get("hypotheticalQueries", [])
         if hyp_queries:
-            logger.debug(
-                f"Search match: query='{query_text[:50]}', hypotheticalQueries={hyp_queries}"
-            )
-
+            logger.debug("Search match hypotheticalQueries=%s", hyp_queries)
         stripped = _strip(doc, extra_strip={"hypotheticalQueries"})
-        stripped["score"] = round(score, 4)
+        stripped["score"] = score
         processed.append(stripped)
 
     return {"results": processed, "query": query_text, "total": len(processed)}
 
 
-def update_document(user_id: str, doc_id: str, updates: dict) -> dict:
-    """Update fields on an existing document using dot-path deep merge."""
-    doc = cosmos_client.read_item(doc_id, user_id)
-
-    # Strip immutable fields from updates
-    clean_updates = {k: v for k, v in updates.items() if k not in IMMUTABLE_FIELDS}
-
-    # Check for recurring task completion
-    is_completing_recurring = (
-        clean_updates.get("state.status") == "done"
-        and doc.get("state", {}).get("isRecurring")
-        and doc.get("state", {}).get("recurrenceDays")
-        and doc.get("state", {}).get("status") != "done"  # not already done
-    )
-
-    # Apply dot-path updates
-    for key, value in clean_updates.items():
+def _apply_dot_path_updates(document: dict, updates: dict) -> None:
+    for key, value in updates.items():
+        target = document
         parts = key.split(".")
-        target = doc
         for part in parts[:-1]:
             if part not in target or not isinstance(target[part], dict):
                 target[part] = {}
             target = target[part]
         target[parts[-1]] = value
 
-    # Handle recurring task completion
-    if is_completing_recurring:
-        state = doc.get("state", {})
-        now = datetime.now(timezone.utc)
-        recurrence_days = state.get("recurrenceDays", 0)
 
-        state["completionCount"] = state.get("completionCount", 0) + 1
-        state["lastCompletedAt"] = now.isoformat()
-        state["dueDate"] = (now + timedelta(days=recurrence_days)).isoformat()
-        state["status"] = "open"
-        state["progressNotes"] = state.get("progressNotes", []) + [
-            f"Completed on {now.strftime('%Y-%m-%d')}"
-        ]
-        doc["state"] = state
+def _should_apply_recurring_task_completion(document: dict, updates: dict) -> bool:
+    if document.get("docType") != "task":
+        return False
+    if updates.get("state.status") != "done":
+        return False
 
-    # Re-embed if narrative or hypotheticalQueries changed
-    needs_reembed = any(
-        k == "narrative" or k == "hypotheticalQueries" or k.startswith("hypotheticalQueries.")
-        for k in clean_updates
+    state = document.get("state", {})
+    return (
+        document.get("taskType") == "recurringTask"
+        and state.get("isRecurring")
+        and state.get("recurrenceDays")
+        and state.get("status") != "done"
     )
-    if needs_reembed:
+
+
+def _apply_recurring_task_completion(document: dict) -> None:
+    state = document.get("state", {})
+
+    now = datetime.now(timezone.utc)
+    recurrence_days = state["recurrenceDays"]
+    state["completionCount"] = state.get("completionCount", 0) + 1
+    state["lastCompletedAt"] = now.isoformat()
+    state["dueDate"] = (now + timedelta(days=recurrence_days)).isoformat()
+    state["status"] = "open"
+    state["progressNotes"] = list(state.get("progressNotes", [])) + [
+        f"Completed on {now.strftime('%Y-%m-%d')}"
+    ]
+    document["state"] = state
+
+
+def update_document(user_id: str, doc_id: str, updates: dict) -> dict:
+    """Update a document and revalidate it before persistence."""
+
+    doc = cosmos_client.read_item(doc_id, user_id)
+    clean_updates = {k: v for k, v in updates.items() if k not in IMMUTABLE_FIELDS}
+
+    if not clean_updates:
+        return {"id": doc_id, "status": "updated", "updatedAt": doc.get("updatedAt", _now_iso())}
+
+    should_complete_recurring = _should_apply_recurring_task_completion(doc, clean_updates)
+    _apply_dot_path_updates(doc, clean_updates)
+    if should_complete_recurring:
+        _apply_recurring_task_completion(doc)
+    _normalize_tags(doc)
+
+    if document_requires_embedding(doc) and any(
+        key == "narrative" or key == "hypotheticalQueries" or key.startswith("hypotheticalQueries.")
+        for key in clean_updates
+    ):
         doc["embedding"] = generate_embedding(doc)
 
     doc["updatedAt"] = _now_iso()
-    cosmos_client.upsert_item(doc)
-    return {"id": doc_id, "status": "updated", "updatedAt": doc["updatedAt"]}
+    validated = _model_validate(doc["docType"], doc)
+    upsert_doc = validated.model_dump()
+    if document_requires_embedding(doc):
+        upsert_doc["embedding"] = doc.get("embedding", [])
+    elif "embedding" in doc:
+        upsert_doc["embedding"] = doc.get("embedding", [])
+
+    cosmos_client.upsert_item(upsert_doc)
+    return {"id": doc_id, "status": "updated", "updatedAt": upsert_doc["updatedAt"]}
 
 
 def delete_document(user_id: str, doc_id: str) -> dict:
-    """Hard delete a document."""
+    """Delete a document by ID and partition key."""
+
     cosmos_client.delete_item(doc_id, user_id)
     return {"id": doc_id, "status": "deleted"}
 
 
 def raw_query_documents(user_id: str, sql: str, parameters: list[dict] | None = None) -> dict:
-    """Execute raw Cosmos SQL with injected userId."""
+    """Execute a read-only raw Cosmos query with user partition enforcement."""
+
+    if READ_ONLY_SQL_PATTERN.search(sql):
+        raise ValidationError("raw_query only supports read-only Cosmos SQL")
+    if "c.userId = @userId" not in sql and "c.userid = @userid" not in sql.lower():
+        raise ValidationError("raw_query SQL must include c.userId = @userId in the WHERE clause")
+
     params = list(parameters or [])
+    if any(param.get("name") == "@userId" for param in params):
+        raise ValidationError("raw_query parameters must not include @userId; the server injects it")
     params.append({"name": "@userId", "value": user_id})
 
     results = cosmos_client.query_items(sql, params, partition_key=user_id, max_item_count=100)
-    stripped = [_strip(doc) for doc in results]
+    stripped = [_strip(doc) for doc in results[:100]]
     return {"results": stripped, "total": len(stripped)}

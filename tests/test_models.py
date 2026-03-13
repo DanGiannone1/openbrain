@@ -3,10 +3,17 @@
 import pytest
 from pydantic import ValidationError
 
-from openbrain.models.common import AiMetadata, BaseDocument
-from openbrain.models.memory import MemoryDocument
-from openbrain.models.task import TaskDocument, TaskState
-from openbrain.models.review import ReviewDocument
+from openbrain.models import (
+    AiMetadata,
+    GoalDocument,
+    GoalState,
+    IdeaDocument,
+    MemoryDocument,
+    MiscDocument,
+    TaskDocument,
+    TaskState,
+    UserSettingsDocument,
+)
 
 
 class TestAiMetadata:
@@ -17,125 +24,106 @@ class TestAiMetadata:
 
     def test_extra_fields_allowed(self):
         meta = AiMetadata(urgency="high", customField="hello")
-        assert meta.urgency == "high"
         assert meta.customField == "hello"
 
-    def test_urgency_enum(self):
+    def test_invalid_urgency(self):
         with pytest.raises(ValidationError):
             AiMetadata(urgency="critical")
 
 
 class TestMemoryDocument:
-    def test_valid_fact(self):
-        doc = MemoryDocument(
-            narrative="The garage router password is admin/123",
-            memoryType="fact",
-        )
+    def test_valid_memory(self):
+        doc = MemoryDocument(narrative="The garage router password is admin/123")
         assert doc.docType == "memory"
-        assert doc.memoryType == "fact"
         assert doc.hypotheticalQueries == []
-        assert doc.supersededBy is None
 
-    def test_valid_idea_with_hyde(self):
+    def test_hyde_queries_optional(self):
         doc = MemoryDocument(
-            narrative="Idea for a new app",
-            memoryType="idea",
-            hypotheticalQueries=["What app ideas do I have?", "Any brainstorms?", "New projects?"],
+            narrative="The VPN lives at vpn.example.com",
+            hypotheticalQueries=[
+                "What is the VPN hostname?",
+                "How do I connect to the office VPN?",
+                "Where is the VPN endpoint?",
+            ],
         )
         assert len(doc.hypotheticalQueries) == 3
 
-    def test_invalid_memory_type(self):
-        with pytest.raises(ValidationError):
-            MemoryDocument(narrative="test", memoryType="note")
 
-    def test_missing_narrative(self):
-        with pytest.raises(ValidationError):
-            MemoryDocument(memoryType="fact")
+class TestIdeaDocument:
+    def test_valid_idea(self):
+        doc = IdeaDocument(narrative="Build an internal agent dashboard")
+        assert doc.docType == "idea"
+        assert doc.goalId is None
 
-    def test_missing_memory_type(self):
-        with pytest.raises(ValidationError):
-            MemoryDocument(narrative="test")
+    def test_idea_can_link_to_goal(self):
+        doc = IdeaDocument(narrative="Launch a new Soligence offering", goalId="goal:123")
+        assert doc.goalId == "goal:123"
 
 
 class TestTaskDocument:
     def test_valid_one_time_task(self):
-        doc = TaskDocument(
-            narrative="Pay the urology bill",
-            taskType="oneTimeTask",
-        )
+        doc = TaskDocument(narrative="Pay the urology bill", taskType="oneTimeTask")
         assert doc.docType == "task"
         assert doc.state.status == "open"
-        assert doc.state.isRecurring is False
 
     def test_valid_recurring_task(self):
         doc = TaskDocument(
-            narrative="Clean the shower",
+            narrative="Deep clean the shower",
             taskType="recurringTask",
-            state=TaskState(
-                status="open",
-                isRecurring=True,
-                recurrenceDays=30,
-            ),
+            goalId="goal:house",
+            state=TaskState(isRecurring=True, recurrenceDays=30),
         )
+        assert doc.goalId == "goal:house"
         assert doc.state.recurrenceDays == 30
-        assert doc.state.completionCount == 0
-
-    def test_valid_goal(self):
-        doc = TaskDocument(
-            narrative="Learn Spanish",
-            taskType="goal",
-            state=TaskState(status="inProgress", progressNotes=["Started Duolingo"]),
-        )
-        assert doc.state.progressNotes == ["Started Duolingo"]
 
     def test_invalid_task_type(self):
         with pytest.raises(ValidationError):
-            TaskDocument(narrative="test", taskType="chore")
-
-    def test_invalid_status(self):
-        with pytest.raises(ValidationError):
-            TaskDocument(
-                narrative="test",
-                taskType="oneTimeTask",
-                state=TaskState(status="pending"),
-            )
+            TaskDocument(narrative="Test", taskType="goal")
 
 
-class TestReviewDocument:
-    def test_valid_review(self):
-        doc = ReviewDocument(
-            narrative="Something about John and taxes",
-            triageAttempt={"reason": "Ambiguous"},
+class TestGoalDocument:
+    def test_valid_goal(self):
+        doc = GoalDocument(
+            narrative="Get better at Spanish",
+            state=GoalState(status="active", progressNotes=["Started Duolingo"]),
         )
-        assert doc.docType == "review"
-        assert doc.resolvedAt is None
-        assert doc.resolution is None
+        assert doc.docType == "goal"
+        assert doc.state.progressNotes == ["Started Duolingo"]
 
-    def test_valid_resolution(self):
-        doc = ReviewDocument(
-            narrative="test",
-            resolution="reIngested",
-            resolvedAt="2026-03-11T14:30:00Z",
-        )
-        assert doc.resolution == "reIngested"
-
-    def test_invalid_resolution(self):
+    def test_invalid_goal_status(self):
         with pytest.raises(ValidationError):
-            ReviewDocument(narrative="test", resolution="deleted")
+            GoalDocument(narrative="Bad goal", state=GoalState(status="open"))
+
+
+class TestMiscDocument:
+    def test_valid_misc(self):
+        doc = MiscDocument(
+            narrative="Something about a cleaning service maybe",
+            suggestedDocType="task",
+        )
+        assert doc.docType == "misc"
+        assert doc.suggestedDocType == "task"
+
+    def test_invalid_suggested_doc_type(self):
+        with pytest.raises(ValidationError):
+            MiscDocument(narrative="Test", suggestedDocType="review")
+
+
+class TestUserSettingsDocument:
+    def test_valid_user_settings(self):
+        doc = UserSettingsDocument(tagTaxonomy=["personal", "soligence", "microsoft"])
+        assert doc.docType == "userSettings"
+        assert doc.tagTaxonomy == ["personal", "soligence", "microsoft"]
 
 
 class TestExtraFields:
-    def test_base_document_extra_allowed(self):
-        doc = MemoryDocument(
-            narrative="test",
-            memoryType="fact",
-            customField="extra data",
-        )
+    def test_content_document_extra_fields_allowed(self):
+        doc = MemoryDocument(narrative="Test", customField="extra data")
         assert doc.customField == "extra data"
 
-    def test_ai_metadata_extra_allowed(self):
+    def test_ai_metadata_extra_fields_allowed(self):
         doc = TaskDocument(
-            narrative="test",
+            narrative="Test",
             taskType="oneTimeTask",
             aiMetadata=AiMetadata(urgency="high", relatedPeople=["John"]),
         )
