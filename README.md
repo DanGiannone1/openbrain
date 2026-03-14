@@ -2,6 +2,31 @@
 
 OpenBrain is an MCP server plus Azure deployment surface for storing and retrieving personal knowledge, ideas, goals, and tasks.
 
+## What OpenBrain Does
+
+At the highest level, OpenBrain exists to do six things for the user:
+
+1. Capture
+   Get facts, ideas, goals, and tasks out of the user's head with very little friction.
+2. Organize
+   Keep stored information coherent over time through classification, cleanup, and lightweight structure.
+3. Recall
+   Answer natural-language questions about what the user has previously captured.
+4. Track
+   Maintain operational state for one-time tasks, recurring tasks, and goals.
+5. Coach
+   Help the user make progress on important goals without turning the system into a rigid productivity app.
+6. Prompt
+   Provide useful proactive outreach such as reminders, stale-goal nudges, and planning support.
+
+The intended product stance is:
+- more active than a passive archive
+- less intrusive than a nagging task manager
+- useful as an organized assistant
+- eventually capable of acting like a lightweight chief of staff
+
+For the fuller behavior-oriented view, use [USER_JOURNEYS.md](USER_JOURNEYS.md).
+
 Start here:
 - expected behavior and requirements: [USER_JOURNEYS.md](USER_JOURNEYS.md)
 - product and repo contract: [DESIGN_SPEC.md](DESIGN_SPEC.md)
