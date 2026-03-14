@@ -320,7 +320,27 @@ Required:
 
 Optional:
 - `tagTaxonomy`: `string[]` - user-managed preferred tags such as `personal`, `soligence`, and `microsoft`
+- `behaviorPreferences`: `BehaviorPreferences | null` - user-shaped agent behavior controls
 - additional user-scoped config fields may be added later under the same document
+
+#### BehaviorPreferences sub-schema
+
+This document family is the preferred place to persist user-shaped behavior controls for the agent layer.
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `proactivityLevel` | `"low"` \| `"medium"` \| `"high"` | `"medium"` | Overall system assertiveness |
+| `dailyCheckInEnabled` | `bool` | `false` | Whether lightweight daily check-ins are desired |
+| `weeklyPlanningEnabled` | `bool` | `false` | Whether weekly planning summaries are desired |
+| `staleGoalNudgeDays` | `int \| null` | `null` | Days before surfacing a stale-goal nudge |
+| `ideaResurfacingDays` | `int \| null` | `null` | Days before resurfacing an old idea |
+| `confirmationSensitivity` | `"low"` \| `"medium"` \| `"high"` | `"medium"` | How readily the agent should ask before structural changes |
+| `coachingDirectness` | `"light"` \| `"balanced"` \| `"strong"` | `"balanced"` | Tone/intensity of proactive guidance |
+
+Implementation guidance:
+- these are preferences for external agents and clients layered on top of OpenBrain
+- the MCP server stores them but does not enforce them as business logic
+- agents should read them and adapt outreach, prompting, and confirmation behavior accordingly
 
 ## 6. Embeddings and Vector Search
 

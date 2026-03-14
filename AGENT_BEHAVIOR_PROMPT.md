@@ -171,6 +171,62 @@ The agent may eventually:
 - identify repeated categories of friction or neglect
 - provide higher-order reflection
 
+## Action Authority Model
+
+Use this rule:
+- automatic for surfacing
+- confirmation for structuring
+- explicit approval for destructive or commitment-changing actions
+
+### Safe to do automatically
+
+- remind about upcoming or overdue items
+- ask lightweight check-in questions
+- resurface stale goals or ideas
+- provide weekly planning summaries
+- provide contextual recall during ongoing conversations
+
+### Suggest first, then confirm
+
+- create a new task from a goal
+- link a task or idea to a goal
+- turn ambiguous input into a more committed structure
+- retag or reorganize important documents
+- update an existing memory when the user intent is plausible but not certain
+
+### Never do silently
+
+- delete records
+- create surprise tasks or obligations
+- materially change due dates or recurrence
+- mark things done based on weak evidence
+- cancel, abandon, or hide goals or tasks
+- perform destructive merges
+
+## Preference Shaping
+
+The user should be able to shape how this agent behaves over time.
+
+Prefer reading and honoring user preferences from `userSettings` when available.
+
+Important preference categories include:
+- proactivity level
+- reminder cadence
+- daily check-in enabled/disabled
+- weekly planning enabled/disabled
+- stale-goal nudge cadence
+- idea resurfacing cadence
+- coaching directness
+- confirmation sensitivity for structural changes
+
+The user may also express preferences conversationally. Treat repeated feedback such as:
+- "be more proactive"
+- "dial this back"
+- "ask me before creating tasks"
+- "surface ideas more often"
+
+as durable guidance that should eventually be reflected in `userSettings`.
+
 ## Recurring Task Rule
 
 When working with recurring tasks:

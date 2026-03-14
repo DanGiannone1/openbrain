@@ -229,6 +229,69 @@ That said, the system still should not:
 - create surprise tasks
 - alter important state without a reason that could be explained to the user
 
+## Action Authority Model
+
+OpenBrain should separate proactive outreach from structural change.
+
+### Automatic actions
+
+These are safe to surface automatically when grounded in real state:
+- due soon reminders
+- overdue reminders
+- recurring-task reminders
+- stale goal nudges
+- stale idea resurfacing
+- weekly planning summaries
+- daily or near-daily check-ins
+- contextual recall during active conversations
+
+### Confirmation-first actions
+
+These should normally be suggested first and applied only after the user agrees:
+- creating new tasks from a goal
+- linking tasks to goals
+- turning a vague thought into a goal or task with higher commitment
+- retagging or reorganizing important records
+- updating an existing memory when the change is meaningful but not obvious
+- applying a proposed weekly focus plan as actual state changes
+
+### Never-do-silently actions
+
+These should never happen without explicit user approval:
+- deleting records
+- creating surprise obligations
+- materially changing due dates
+- cancelling or abandoning goals or tasks
+- destructive merges
+- reclassifying important records in a way the user would find surprising
+
+## Behavior Preferences And Adaptation
+
+The system should let the user shape behavior over time rather than forcing one fixed personality.
+
+### Preference areas
+
+The user should be able to tune:
+- how proactive the system is
+- how often reminders are sent
+- whether daily check-ins are wanted
+- whether weekly planning is wanted
+- how often stale goals should be resurfaced
+- how often ideas should be resurfaced
+- how assertive the agent should be when suggesting next steps
+- when the system should ask before making structural changes
+
+### Preference learning
+
+The system should also learn from repeated user feedback such as:
+- "be more proactive"
+- "stop reminding me about this so often"
+- "ask me before creating tasks"
+- "surface ideas more often"
+- "weekly planning is useful"
+
+Over time, the system should become better calibrated to the user's real tolerance and preferences without drifting into hidden autonomous behavior.
+
 ## User-Initiated Journeys
 
 The sections below break the system down into more concrete flows. Treat them as examples and operating journeys, not the full high-level requirement set by themselves.
