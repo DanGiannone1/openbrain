@@ -219,6 +219,10 @@ Optional:
 | `completionCount` | `int` | `0` | Incremented on each completion |
 | `progressNotes` | `string[]` | `[]` | Append-only log of progress entries |
 
+For operational "what is coming up?" views, recurring tasks should have an explicit `dueDate`. `recurrenceDays` by itself defines cadence, but it does not establish the next upcoming occurrence unless the task has either:
+- an explicit seeded `dueDate`, or
+- a prior completion event that allowed the server to compute the next `dueDate`
+
 #### `recurrenceDays` conversion table
 
 `recurrenceDays` is an integer representing calendar days between recurrences. The triage agent converts natural-language expressions before calling `write`.

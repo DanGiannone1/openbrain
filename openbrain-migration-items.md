@@ -51,7 +51,7 @@ Note: "facts" should be imported as `memory`, not as a separate docType.
 | T15 | RX refill | `personal` | recurringTask | open |  | true | 30 | Monthly recurring. From Prism |
 | T16 | Install new Ring doorbell | `personal` | oneTimeTask | open |  | false |  | From Prism |
 | T17 | Install or fix garage door opener | `personal` | oneTimeTask | open |  | false |  | From Prism |
-| T18 | Seasonal wardrobe review and donations | `personal` | recurringTask | open | 2026-07-01 | true | 180 | Spring and Fall. From Prism |
+| T18 | Seasonal wardrobe review and donations | `personal` | recurringTask | open | 2026-04-01 | true | 180 | Spring and Fall. From Prism |
 | T19 | Go through mail | `personal` | recurringTask | open |  | true | 7 | Weekly. From Prism |
 | T20 | Update all phone apps to new phone | `personal` | oneTimeTask | open |  | false |  | From Prism |
 
