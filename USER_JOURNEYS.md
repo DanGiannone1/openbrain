@@ -31,7 +31,75 @@ OpenBrain should help the user:
 - keep goals visible without turning the system into a rigid productivity app
 - receive useful, low-friction prompts or reminders when appropriate
 
+## High-Level System Responsibilities
+
+This section is the highest-level answer to "what should this system do for the user?"
+
+### User asks / user does
+
+OpenBrain should let the user:
+- capture facts, ideas, goals, and tasks with very little friction
+- ask natural-language questions about their life, work, home, and business state
+- review what is open, what is upcoming, and what has changed
+- update progress naturally rather than through a rigid form workflow
+- complete recurring tasks and have the system keep the cycle moving
+- revisit ideas and goals without losing context
+
+### Agent asks / agent does
+
+OpenBrain-supporting agents should help by:
+- triaging raw user input into the right document type
+- lightly cleaning captured text while preserving the original raw input
+- deduplicating or updating memories and ideas when appropriate
+- helping the user workshop goals into concrete next steps when invited
+- helping keep records organized and coherent over time
+- surfacing neglected, stale, or important state without surprising the user
+
+### Proactive support the overall system may provide
+
+At a high level, the overall system should be able to:
+- remind the user about upcoming recurring tasks and deadlines
+- notice things that have fallen off the radar
+- help the user stay on track with goals
+- support weekly planning by looking holistically at goals, tasks, and commitments
+- support lightweight daily check-ins or progress updates
+- help the user decide what matters this week without becoming overbearing
+
+## Desired Capability Areas
+
+These are the major buckets of expected behavior we should design around.
+
+### 1. Capture and externalize
+
+The system should make it easy to get information out of the user's head and into stable storage.
+
+### 2. Recall and answer
+
+The system should reliably answer questions about what the user has previously captured.
+
+### 3. Track and maintain state
+
+The system should maintain clear operational state for tasks, recurring responsibilities, and goals.
+
+### 4. Organize and refine
+
+The system should help keep the knowledge base clean, coherent, and easy to use over time.
+
+### 5. Coach and keep on track
+
+The system should help the user make progress on goals, not just store them passively.
+
+### 6. Prompt and remind
+
+The system should provide useful proactive outreach when something is upcoming, stale, or worth revisiting.
+
+### 7. Support planning and reflection
+
+The system should help with weekly planning, prioritization, and lightweight reflection based on everything it knows.
+
 ## User-Initiated Journeys
+
+The sections below break the system down into more concrete flows. Treat them as examples and operating journeys, not the full high-level requirement set by themselves.
 
 ### 1. Capture a memory
 
