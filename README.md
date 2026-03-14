@@ -3,6 +3,7 @@
 OpenBrain is an MCP server plus Azure deployment surface for storing and retrieving personal knowledge, ideas, goals, and tasks.
 
 Start here:
+- expected behavior and requirements: [USER_JOURNEYS.md](USER_JOURNEYS.md)
 - product and repo contract: [DESIGN_SPEC.md](DESIGN_SPEC.md)
 - high-level product context: [SYSTEM_BLUEPRINT.md](SYSTEM_BLUEPRINT.md)
 - local MCP/tooling setup: [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md)
@@ -11,6 +12,7 @@ Start here:
 
 | Document | Role |
 |---|---|
+| [USER_JOURNEYS.md](USER_JOURNEYS.md) | User-facing and agent-facing expected behavior |
 | [DESIGN_SPEC.md](DESIGN_SPEC.md) | Source of truth for architecture, schemas, and behavioral rules |
 | [SYSTEM_BLUEPRINT.md](SYSTEM_BLUEPRINT.md) | High-level product context and conceptual model |
 | [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md) | Repo MCP configuration and local tooling setup |
@@ -40,12 +42,13 @@ Example: recurring task rules belong in the spec first, then in `document_servic
 
 When there is tension between docs, use this order:
 
-1. `DESIGN_SPEC.md`
-2. runtime code in `src/openbrain/`
-3. tests
-4. `SYSTEM_BLUEPRINT.md`
+1. `USER_JOURNEYS.md`
+2. `DESIGN_SPEC.md`
+3. runtime code in `src/openbrain/`
+4. tests
+5. `SYSTEM_BLUEPRINT.md`
 
-`SYSTEM_BLUEPRINT.md` provides intent and product context. It should not override the implementation contract in `DESIGN_SPEC.md`.
+`USER_JOURNEYS.md` captures desired behavior. `DESIGN_SPEC.md` captures the implementation contract. `SYSTEM_BLUEPRINT.md` provides broader context and should not override either one.
 
 This repo now includes a checked-in `.mcp.json` for:
 
