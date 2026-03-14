@@ -93,7 +93,7 @@ Those plugins are optional. The checked-in `.mcp.json` is the repo-level integra
 
 - `Use openbrain-local to store a test task and then read it back.`
 - `Use microsoft-learn to find the current Cosmos DB vectorEmbeddingPolicy ARM shape.`
-- `Use azure-mcp-server to inspect resource group rg-openbrain-dev and list Cosmos and Container Apps resources.`
+- `Use azure-mcp-server to inspect resource group openbrain-dev and list Cosmos and Container Apps resources.`
 - `Use microsoft-learn first, then azure-mcp-server if needed, to verify the correct Azure CLI steps for Container Apps secrets.`
 
 ## Sources
