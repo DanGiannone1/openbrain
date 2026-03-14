@@ -51,7 +51,7 @@ When modifying data model behavior:
 1. Confirm the exact intended behavior in the spec.
 2. Update the model definitions if the shape changes.
 3. Update the service-layer logic if mutation or defaults change.
-4. Update migration/seed docs if they depend on the old behavior.
+4. Update any temporary import or seed artifacts if they depend on the old behavior.
 5. Run the relevant tests, then the full suite if the change is broad.
 6. Commit the change immediately after validation.
 
@@ -60,6 +60,4 @@ When modifying data model behavior:
 - Schema fields: [src/openbrain/models](C:/projects/openbrain/src/openbrain/models)
 - Write/update behavior: [src/openbrain/services/document_service.py](C:/projects/openbrain/src/openbrain/services/document_service.py)
 - Search/query behavior: [src/openbrain/cosmos_client.py](C:/projects/openbrain/src/openbrain/cosmos_client.py)
-- Seed data: [openbrain-migration-items.md](C:/projects/openbrain/openbrain-migration-items.md)
-- Hosted seeding script: [scripts/seed_openbrain_items.py](C:/projects/openbrain/scripts/seed_openbrain_items.py)
-
+- If a future bulk import is needed, add a dedicated import doc or script for that one-off operation rather than treating it as a permanent source-of-truth document.

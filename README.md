@@ -6,7 +6,6 @@ Start here:
 - product and repo contract: [DESIGN_SPEC.md](DESIGN_SPEC.md)
 - high-level product context: [SYSTEM_BLUEPRINT.md](SYSTEM_BLUEPRINT.md)
 - local MCP/tooling setup: [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md)
-- curated seed/import data: [openbrain-migration-items.md](openbrain-migration-items.md)
 
 ## Documentation Map
 
@@ -15,7 +14,6 @@ Start here:
 | [DESIGN_SPEC.md](DESIGN_SPEC.md) | Source of truth for architecture, schemas, and behavioral rules |
 | [SYSTEM_BLUEPRINT.md](SYSTEM_BLUEPRINT.md) | High-level product context and conceptual model |
 | [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md) | Repo MCP configuration and local tooling setup |
-| [openbrain-migration-items.md](openbrain-migration-items.md) | Curated seed/import data only |
 | [CLAUDE.md](CLAUDE.md) | Claude repo operating rules |
 | [AGENTS.md](AGENTS.md) | Codex repo operating rules |
 | [.claude/hooks/README.md](.claude/hooks/README.md) | Claude hook wiring and purpose |
@@ -46,7 +44,6 @@ When there is tension between docs, use this order:
 2. runtime code in `src/openbrain/`
 3. tests
 4. `SYSTEM_BLUEPRINT.md`
-5. migration/seed docs
 
 `SYSTEM_BLUEPRINT.md` provides intent and product context. It should not override the implementation contract in `DESIGN_SPEC.md`.
 
