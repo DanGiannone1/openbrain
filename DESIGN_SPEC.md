@@ -327,13 +327,15 @@ Optional:
 
 This document family is the preferred place to persist user-shaped behavior controls for the agent layer.
 
+These fields define stored preference signals, not product-mandated defaults for outreach timing. External agents may interpret them conservatively or evolve them over time.
+
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `proactivityLevel` | `"low"` \| `"medium"` \| `"high"` | `"medium"` | Overall system assertiveness |
-| `dailyCheckInEnabled` | `bool` | `false` | Whether lightweight daily check-ins are desired |
-| `weeklyPlanningEnabled` | `bool` | `false` | Whether weekly planning summaries are desired |
-| `staleGoalNudgeDays` | `int \| null` | `null` | Days before surfacing a stale-goal nudge |
-| `ideaResurfacingDays` | `int \| null` | `null` | Days before resurfacing an old idea |
+| `dailyCheckInEnabled` | `bool` | `false` | Whether lightweight check-ins are desired |
+| `weeklyPlanningEnabled` | `bool` | `false` | Whether planning summaries are desired |
+| `staleGoalNudgeDays` | `int \| null` | `null` | Optional implementation hint for stale-goal resurfacing |
+| `ideaResurfacingDays` | `int \| null` | `null` | Optional implementation hint for idea resurfacing |
 | `confirmationSensitivity` | `"low"` \| `"medium"` \| `"high"` | `"medium"` | How readily the agent should ask before structural changes |
 | `coachingDirectness` | `"light"` \| `"balanced"` \| `"strong"` | `"balanced"` | Tone/intensity of proactive guidance |
 
@@ -341,6 +343,7 @@ Implementation guidance:
 - these are preferences for external agents and clients layered on top of OpenBrain
 - the MCP server stores them but does not enforce them as business logic
 - agents should read them and adapt outreach, prompting, and confirmation behavior accordingly
+- implementations should avoid treating these fields as rigid schedule contracts unless the user explicitly wants that
 
 ## 6. Embeddings and Vector Search
 

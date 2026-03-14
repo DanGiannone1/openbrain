@@ -10,6 +10,8 @@ Use it to answer:
 - what proactive behavior is desirable
 - what "good" looks like for the system
 
+This document is intentionally high level. It should define capabilities, posture, and expected behavior, not lock the product into exact reminder cadences or orchestration mechanics too early.
+
 This is not the implementation contract. For exact schemas, API/tool behavior, and server rules, use [DESIGN_SPEC.md](C:/projects/openbrain/DESIGN_SPEC.md).
 
 ## Document Role
@@ -61,8 +63,8 @@ At a high level, the overall system should be able to:
 - remind the user about upcoming recurring tasks and deadlines
 - notice things that have fallen off the radar
 - help the user stay on track with goals
-- support weekly planning by looking holistically at goals, tasks, and commitments
-- support lightweight daily check-ins or progress updates
+- support planning by looking holistically at goals, tasks, and commitments
+- support lightweight check-ins or progress updates
 - help the user decide what matters this week without becoming overbearing
 
 ## Desired Capability Areas
@@ -241,8 +243,8 @@ These are safe to surface automatically when grounded in real state:
 - recurring-task reminders
 - stale goal nudges
 - stale idea resurfacing
-- weekly planning summaries
-- daily or near-daily check-ins
+- planning summaries
+- lightweight check-ins
 - contextual recall during active conversations
 
 ### Confirmation-first actions
@@ -273,11 +275,11 @@ The system should let the user shape behavior over time rather than forcing one 
 
 The user should be able to tune:
 - how proactive the system is
-- how often reminders are sent
-- whether daily check-ins are wanted
-- whether weekly planning is wanted
-- how often stale goals should be resurfaced
-- how often ideas should be resurfaced
+- whether reminders are desired and how aggressive they should feel
+- whether check-ins are wanted
+- whether planning support is wanted
+- how strongly stale goals should be resurfaced
+- how strongly old ideas should be resurfaced
 - how assertive the agent should be when suggesting next steps
 - when the system should ask before making structural changes
 
@@ -288,7 +290,7 @@ The system should also learn from repeated user feedback such as:
 - "stop reminding me about this so often"
 - "ask me before creating tasks"
 - "surface ideas more often"
-- "weekly planning is useful"
+- "planning summaries are useful"
 
 Over time, the system should become better calibrated to the user's real tolerance and preferences without drifting into hidden autonomous behavior.
 
@@ -493,3 +495,4 @@ The system is behaving well when:
 - whether `misc` stays valuable or becomes unnecessary
 - when a goal should merely be visible versus when an agent should suggest a next step
 - whether recurring tasks with no real-world deadline should still get seeded `dueDate`s by default
+- which behavior preferences should be persisted explicitly versus inferred gradually from feedback

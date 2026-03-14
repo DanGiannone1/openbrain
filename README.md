@@ -25,7 +25,11 @@ The intended product stance is:
 - useful as an organized assistant
 - eventually capable of acting like a lightweight chief of staff
 
-For the fuller behavior-oriented view, use [USER_JOURNEYS.md](USER_JOURNEYS.md).
+Behavior is intentionally documented at two levels:
+- [USER_JOURNEYS.md](USER_JOURNEYS.md) describes what the system should do for the user
+- [AGENT_BEHAVIOR_PROMPT.md](AGENT_BEHAVIOR_PROMPT.md) describes how an agent layered on top of OpenBrain should behave
+
+Those documents define capability and posture, not hard operational cadences. Exact timing for reminders, check-ins, and resurfacing should be shaped by user preference and iteration rather than treated as fixed product truth.
 
 Start here:
 - expected behavior and requirements: [USER_JOURNEYS.md](USER_JOURNEYS.md)
@@ -69,12 +73,13 @@ Example: recurring task rules belong in the spec first, then in `document_servic
 When there is tension between docs, use this order:
 
 1. `USER_JOURNEYS.md`
-2. `DESIGN_SPEC.md`
-3. runtime code in `src/openbrain/`
-4. tests
-5. `SYSTEM_BLUEPRINT.md`
+2. `AGENT_BEHAVIOR_PROMPT.md`
+3. `DESIGN_SPEC.md`
+4. runtime code in `src/openbrain/`
+5. tests
+6. `SYSTEM_BLUEPRINT.md`
 
-`USER_JOURNEYS.md` captures desired behavior. `DESIGN_SPEC.md` captures the implementation contract. `SYSTEM_BLUEPRINT.md` provides broader context and should not override either one.
+`USER_JOURNEYS.md` captures desired product behavior. `AGENT_BEHAVIOR_PROMPT.md` captures the intended agent operating posture. `DESIGN_SPEC.md` captures the implementation contract. `SYSTEM_BLUEPRINT.md` provides broader context and should not override the others.
 
 This repo now includes a checked-in `.mcp.json` for:
 

@@ -35,6 +35,8 @@ The desired product experience is:
 4. Agent-assisted organization
    External agents may help classify, update, prioritize, or remind, but those behaviors sit on top of the MCP server rather than inside it.
 
+This blueprint intentionally stays above exact outreach cadence, preference tuning, or orchestration details. Those belong in the behavior docs and implementation contract, not here.
+
 ## Conceptual Model
 
 OpenBrain separates semantic recall from operational state.
