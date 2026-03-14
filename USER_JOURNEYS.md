@@ -19,7 +19,7 @@ This is not the implementation contract. For exact schemas, API/tool behavior, a
 Use the top-level docs like this:
 - [USER_JOURNEYS.md](C:/projects/openbrain/USER_JOURNEYS.md): expected behavior and requirements
 - [DESIGN_SPEC.md](C:/projects/openbrain/DESIGN_SPEC.md): implementation contract
-- [SYSTEM_BLUEPRINT.md](C:/projects/openbrain/SYSTEM_BLUEPRINT.md): product context and conceptual framing
+- [README.md](C:/projects/openbrain/README.md): high-level product context and repo framing
 
 If a journey here is desired but not yet reflected in the design spec, update the design spec before changing code.
 

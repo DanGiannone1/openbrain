@@ -2,6 +2,22 @@
 
 OpenBrain is an MCP server plus Azure deployment surface for storing and retrieving personal knowledge, ideas, goals, and tasks.
 
+It is a low-friction, AI-native second brain for capturing and retrieving personal knowledge, ideas, goals, and tasks without forcing heavy manual organization.
+
+## Repo Boundary
+
+This repository owns:
+- the MCP server
+- the Azure deployment surface
+- the document model and server-side mutation rules
+
+This repository does not own:
+- Telegram or any other ingestion client
+- external schedulers or orchestrators
+- reminder delivery
+- agent-side classification, prioritization, or cleanup decisions
+- a human-facing UI
+
 ## What OpenBrain Does
 
 At the highest level, OpenBrain exists to do six things for the user:
@@ -25,6 +41,48 @@ The intended product stance is:
 - useful as an organized assistant
 - eventually capable of acting like a lightweight chief of staff
 
+## Product Experience
+
+The intended product experience is:
+
+1. Low-friction capture
+   Users should be able to brain dump facts, ideas, goals, and tasks without navigating a rigid UI.
+2. Reliable recall
+   Users should be able to ask natural-language questions later and retrieve the right stored information.
+3. Structured state where needed
+   Goals and tasks should support lightweight tracking without turning the MCP server into a full planning engine.
+4. Agent-assisted organization
+   External agents may help classify, update, prioritize, or remind, but those behaviors sit on top of the MCP server rather than inside it.
+
+## Conceptual Model
+
+OpenBrain separates semantic recall from operational state.
+
+Semantic recall:
+- `memory`: factual or reference information you want to recall later
+- `idea`: speculative or generative thoughts worth revisiting later
+
+Deterministic state:
+- `goal`: long-running objectives
+- `task`: concrete work items, either one-time or recurring
+- `misc`: ambiguous captures preserved without forced classification
+- `userSettings`: per-user configuration such as tag taxonomy and behavior preferences
+
+Recurring tasks use two separate concepts:
+- `recurrenceDays`: cadence
+- `dueDate`: next upcoming occurrence
+
+Marking a recurring task complete should move the next `dueDate` forward. The server stores and mutates that state; it does not decide what should be worked on.
+
+Reminders are not a stored document type. They are external behavior layered on top of goals and tasks.
+
+## Golden Rules
+
+- The server stores, embeds, queries, and updates documents. It does not decide what matters.
+- Agents or clients own classification, prioritization, cleanup, and reminder logic.
+- The schema should stay flexible enough to preserve weird or incomplete input without breaking.
+- The system should reduce friction, not add workflow burden.
+
 Behavior is intentionally documented at two levels:
 - [USER_JOURNEYS.md](USER_JOURNEYS.md) describes what the system should do for the user
 - [AGENT_BEHAVIOR_PROMPT.md](AGENT_BEHAVIOR_PROMPT.md) describes how an agent layered on top of OpenBrain should behave
@@ -34,7 +92,6 @@ Those documents define capability and posture, not hard operational cadences. Ex
 Start here:
 - expected behavior and requirements: [USER_JOURNEYS.md](USER_JOURNEYS.md)
 - product and repo contract: [DESIGN_SPEC.md](DESIGN_SPEC.md)
-- high-level product context: [SYSTEM_BLUEPRINT.md](SYSTEM_BLUEPRINT.md)
 - local MCP/tooling setup: [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md)
 
 ## Documentation Map
@@ -43,7 +100,6 @@ Start here:
 |---|---|
 | [USER_JOURNEYS.md](USER_JOURNEYS.md) | User-facing and agent-facing expected behavior |
 | [DESIGN_SPEC.md](DESIGN_SPEC.md) | Source of truth for architecture, schemas, and behavioral rules |
-| [SYSTEM_BLUEPRINT.md](SYSTEM_BLUEPRINT.md) | High-level product context and conceptual model |
 | [AGENT_BEHAVIOR_PROMPT.md](AGENT_BEHAVIOR_PROMPT.md) | Reusable agent prompt and reasoning-vs-determinism guide |
 | [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md) | Repo MCP configuration and local tooling setup |
 | [CLAUDE.md](CLAUDE.md) | Claude repo operating rules |
@@ -77,9 +133,8 @@ When there is tension between docs, use this order:
 3. `DESIGN_SPEC.md`
 4. runtime code in `src/openbrain/`
 5. tests
-6. `SYSTEM_BLUEPRINT.md`
 
-`USER_JOURNEYS.md` captures desired product behavior. `AGENT_BEHAVIOR_PROMPT.md` captures the intended agent operating posture. `DESIGN_SPEC.md` captures the implementation contract. `SYSTEM_BLUEPRINT.md` provides broader context and should not override the others.
+`README.md` gives the high-level product and repo framing. `USER_JOURNEYS.md` captures desired product behavior. `AGENT_BEHAVIOR_PROMPT.md` captures the intended agent operating posture. `DESIGN_SPEC.md` captures the implementation contract.
 
 This repo now includes a checked-in `.mcp.json` for:
 
