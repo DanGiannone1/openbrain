@@ -45,7 +45,7 @@ Update this table whenever skills are added, removed, or renamed.
 | `.claude/skills/data-models/SKILL.md` | Data model and schema changes |
 | `.claude/skills/github-issues/SKILL.md` | Issue triage and backlog operations |
 
-Repo status: `.claude/skills/` is not present yet in this repository. Add repo-specific skills there as they are created.
+Repo status: `.claude/skills/` is present in this repository. Current repo-local skill: `.claude/skills/data-models/SKILL.md`.
 
 ## User Preferences
 
