@@ -71,7 +71,6 @@ Note: "facts" should be imported as `memory`, not as a separate docType.
 
 | Ref | narrative | contextTags | hypotheticalQueries |
 |---|---|---|---|
-| M1 | Fitness routine: 3-4x per week yoga and weights, intermittent fasting is an established practice, home gym in basement | `personal` | What is my workout routine?; Do I have a home gym?; What diet do I follow? |
 | M2 | Mailbox location: Box 3, Slot #16 | `personal` | Where is my mailbox?; What is my mailbox number? |
 | M3 | Electrical room: clicking sound is likely a dying power adapter for the coax extender; watch for failure | `personal` | What's the clicking sound in the electrical room?; Is there a known issue with the coax? |
 | M4 | Home finance: sewer bill is my responsibility, not escrow. Property tax is paid by escrow and Citadel gets a copy. If the house is reassessed, expect an extra bill that escrow may not receive and I am liable for it. | `personal` | Who pays the sewer bill?; Is property tax in escrow?; What happens if the house is reassessed? |
