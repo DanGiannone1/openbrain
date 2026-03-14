@@ -40,6 +40,7 @@ Start here:
 | [USER_JOURNEYS.md](USER_JOURNEYS.md) | User-facing and agent-facing expected behavior |
 | [DESIGN_SPEC.md](DESIGN_SPEC.md) | Source of truth for architecture, schemas, and behavioral rules |
 | [SYSTEM_BLUEPRINT.md](SYSTEM_BLUEPRINT.md) | High-level product context and conceptual model |
+| [AGENT_BEHAVIOR_PROMPT.md](AGENT_BEHAVIOR_PROMPT.md) | Reusable agent prompt and reasoning-vs-determinism guide |
 | [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md) | Repo MCP configuration and local tooling setup |
 | [CLAUDE.md](CLAUDE.md) | Claude repo operating rules |
 | [AGENTS.md](AGENTS.md) | Codex repo operating rules |
