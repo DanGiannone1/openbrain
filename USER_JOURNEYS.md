@@ -97,6 +97,138 @@ The system should provide useful proactive outreach when something is upcoming, 
 
 The system should help with weekly planning, prioritization, and lightweight reflection based on everything it knows.
 
+## Product Behavior Map
+
+This section translates the high-level capability areas into concrete product behavior modes.
+
+For the current phase of OpenBrain, the bias should be:
+- start more active rather than too passive
+- allow the system to be opinionated and helpful
+- tune down later if behavior feels noisy or unhelpful
+
+The main user is currently the product owner, architect, and developer, so the system does not need to be overly timid at this stage.
+
+### 1. Core system behavior
+
+These behaviors are foundational and should always be strong:
+- capture quickly
+- classify effectively
+- preserve raw input
+- maintain lightly cleaned stored text
+- retrieve the right memory or idea later
+- track tasks and goals reliably
+- roll recurring tasks forward correctly
+
+### 2. Reminder behavior
+
+The system should proactively surface:
+- upcoming recurring tasks
+- overdue one-time tasks
+- tasks that are still open after a meaningful amount of time
+- time-sensitive obligations that are approaching
+
+Examples:
+- "Your car registration renewal is due soon."
+- "You still have `Mail state taxes` open."
+- "Your prescription refill is coming up."
+
+### 3. Check-in behavior
+
+The system should be able to ask for lightweight updates in order to keep state fresh.
+
+Examples:
+- "What did you get done today?"
+- "Did you end up mailing the state taxes?"
+- "Did you refill your prescription?"
+
+Purpose:
+- close the loop on stale or uncertain state
+- keep the second brain aligned with reality
+
+### 4. Weekly planning behavior
+
+The system should be able to step back and help the user decide what matters for the coming week.
+
+Examples:
+- "Here are the top 3 things to focus on this week."
+- "You have a mix of admin, home, and work items that need attention."
+- "These are the goals and tasks that seem most important right now."
+
+Purpose:
+- reduce overwhelm
+- provide prioritization help
+- make the system feel like a lightweight chief of staff
+
+### 5. Goal support behavior
+
+The system should help the user stay connected to goals over time.
+
+Examples:
+- "You have not made progress on Spanish in a while."
+- "Your patio project has not been updated recently."
+- "This goal may need a next step or a decision."
+
+Important nuance:
+- the system should support goals actively
+- but it should not silently create surprise tasks or hidden work
+- suggestions and prompts are good
+- hidden autonomous task creation is not
+
+### 6. Idea resurfacing behavior
+
+The system should periodically revive good ideas that have gone cold.
+
+Examples:
+- "You captured several Soligence ideas that you have not revisited."
+- "This idea may be worth reviewing again."
+- "You have multiple related ideas that could be grouped together."
+
+Purpose:
+- keep valuable thinking from getting buried
+- make the idea store feel alive, not archival
+
+### 7. Pattern insight behavior
+
+The system should eventually notice patterns across everything it knows.
+
+Examples:
+- "You have been handling urgent admin work, but none of your longer-term goals moved this week."
+- "Most of your recent activity has been personal; Microsoft and Soligence items may need attention."
+- "You keep revisiting this same category of task or idea."
+
+Purpose:
+- give the user higher-order insight
+- move from storage toward useful reflection and guidance
+
+### 8. Prioritization behavior
+
+The system should be able to synthesize:
+- urgency
+- deadlines
+- neglected goals
+- recurring obligations
+- broader personal, business, and work context
+
+It should then produce useful recommendations such as:
+- what to focus on today
+- what to focus on this week
+- what is slipping
+- what can wait
+
+### 9. Behavioral posture
+
+The intended posture is:
+- proactive
+- helpful
+- willing to nudge
+- not constrained by fear of seeming "too active" during this early phase
+
+That said, the system still should not:
+- fabricate urgency
+- make hidden changes
+- create surprise tasks
+- alter important state without a reason that could be explained to the user
+
 ## User-Initiated Journeys
 
 The sections below break the system down into more concrete flows. Treat them as examples and operating journeys, not the full high-level requirement set by themselves.
