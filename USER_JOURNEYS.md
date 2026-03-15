@@ -97,7 +97,7 @@ The system should provide useful proactive outreach when something is upcoming, 
 
 ### 7. Support planning and reflection
 
-The system should help with weekly planning, prioritization, and lightweight reflection based on everything it knows.
+The system should help with planning, prioritization, and lightweight reflection based on everything it knows.
 
 ## Product Behavior Map
 
@@ -147,9 +147,9 @@ Purpose:
 - close the loop on stale or uncertain state
 - keep the second brain aligned with reality
 
-### 4. Weekly planning behavior
+### 4. Planning behavior
 
-The system should be able to step back and help the user decide what matters for the coming week.
+The system should be able to step back and help the user decide what matters next.
 
 Examples:
 - "Here are the top 3 things to focus on this week."
@@ -255,7 +255,7 @@ These should normally be suggested first and applied only after the user agrees:
 - turning a vague thought into a goal or task with higher commitment
 - retagging or reorganizing important records
 - updating an existing memory when the change is meaningful but not obvious
-- applying a proposed weekly focus plan as actual state changes
+- applying a proposed focus plan as actual state changes
 
 ### Never-do-silently actions
 

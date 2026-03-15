@@ -147,7 +147,7 @@ The agent should be able to ask:
 ### 6. Planning behavior
 
 The agent should be able to:
-- recommend a weekly focus set
+- recommend a focus set
 - summarize what appears most important
 - synthesize urgency, deadlines, neglected goals, and recurring obligations
 
