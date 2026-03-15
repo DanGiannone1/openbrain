@@ -14,7 +14,7 @@ It answers:
 This is a runtime ownership and flow document. It complements:
 - [README.md](C:/projects/openbrain/README.md) for product and repo framing
 - [USER_JOURNEYS.md](C:/projects/openbrain/USER_JOURNEYS.md) for desired behavior
-- [AGENT_BEHAVIOR_PROMPT.md](C:/projects/openbrain/AGENT_BEHAVIOR_PROMPT.md) for agent posture
+- [AGENT_OPERATING_MODEL.md](C:/projects/openbrain/AGENT_OPERATING_MODEL.md) for shared agent posture
 - [DESIGN_SPEC.md](C:/projects/openbrain/DESIGN_SPEC.md) for implementation truth
 
 ## Current Phase

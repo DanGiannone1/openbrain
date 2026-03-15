@@ -19,7 +19,7 @@ This is not the implementation contract. For exact schemas, API/tool behavior, a
 Use the top-level docs like this:
 - [README.md](C:/projects/openbrain/README.md): high-level product context and repo framing
 - [USER_JOURNEYS.md](C:/projects/openbrain/USER_JOURNEYS.md): expected behavior and requirements
-- [AGENT_BEHAVIOR_PROMPT.md](C:/projects/openbrain/AGENT_BEHAVIOR_PROMPT.md): agent posture and action authority
+- [AGENT_OPERATING_MODEL.md](C:/projects/openbrain/AGENT_OPERATING_MODEL.md): shared agent posture and action authority
 - [RUNTIME_ARCHITECTURE.md](C:/projects/openbrain/RUNTIME_ARCHITECTURE.md): current runtime ownership and flow boundaries
 - [DESIGN_SPEC.md](C:/projects/openbrain/DESIGN_SPEC.md): implementation contract
 

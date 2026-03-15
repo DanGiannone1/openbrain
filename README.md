@@ -85,14 +85,14 @@ Reminders are not a stored document type. They are external behavior layered on 
 
 Behavior is intentionally documented at two levels:
 - [USER_JOURNEYS.md](USER_JOURNEYS.md) describes what the system should do for the user
-- [AGENT_BEHAVIOR_PROMPT.md](AGENT_BEHAVIOR_PROMPT.md) describes how an agent layered on top of OpenBrain should behave
+- [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md) describes how agents layered on top of OpenBrain should behave
 
 Those documents define capability and posture, not hard operational cadences. Exact timing for reminders, check-ins, and resurfacing should be shaped by user preference and iteration rather than treated as fixed product truth.
 
 Start here:
 - high-level product and repo framing: [README.md](README.md)
 - expected behavior and requirements: [USER_JOURNEYS.md](USER_JOURNEYS.md)
-- agent operating posture: [AGENT_BEHAVIOR_PROMPT.md](AGENT_BEHAVIOR_PROMPT.md)
+- agent operating posture: [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md)
 - current runtime ownership and flow boundaries: [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md)
 - product and repo contract: [DESIGN_SPEC.md](DESIGN_SPEC.md)
 - local MCP/tooling setup: [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md)
@@ -104,7 +104,7 @@ Start here:
 | [USER_JOURNEYS.md](USER_JOURNEYS.md) | User-facing and agent-facing expected behavior |
 | [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md) | Current OpenBrain vs Command Center vs OpenClaw ownership and flow boundaries |
 | [DESIGN_SPEC.md](DESIGN_SPEC.md) | Source of truth for architecture, schemas, and behavioral rules |
-| [AGENT_BEHAVIOR_PROMPT.md](AGENT_BEHAVIOR_PROMPT.md) | Reusable agent prompt and reasoning-vs-determinism guide |
+| [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md) | Shared agent posture, authority boundaries, and reasoning-vs-determinism guide |
 | [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md) | Repo MCP configuration and local tooling setup |
 | [CLAUDE.md](CLAUDE.md) | Claude repo operating rules |
 | [AGENTS.md](AGENTS.md) | Codex repo operating rules |
@@ -134,13 +134,13 @@ When there is tension between docs, use this order:
 
 1. `README.md`
 2. `USER_JOURNEYS.md`
-3. `AGENT_BEHAVIOR_PROMPT.md`
+3. `AGENT_OPERATING_MODEL.md`
 4. `RUNTIME_ARCHITECTURE.md`
 5. `DESIGN_SPEC.md`
 6. runtime code in `src/openbrain/`
 7. tests
 
-`README.md` gives the high-level product and repo framing. `USER_JOURNEYS.md` captures desired product behavior. `AGENT_BEHAVIOR_PROMPT.md` captures the intended agent operating posture. `RUNTIME_ARCHITECTURE.md` explains the current split runtime. `DESIGN_SPEC.md` captures the implementation contract.
+`README.md` gives the high-level product and repo framing. `USER_JOURNEYS.md` captures desired product behavior. `AGENT_OPERATING_MODEL.md` captures the shared agent operating posture. `RUNTIME_ARCHITECTURE.md` explains the current split runtime. `DESIGN_SPEC.md` captures the implementation contract.
 
 ## Logical Reading Order
 
@@ -148,7 +148,7 @@ If you are trying to understand the repo end to end, read the docs in this order
 
 1. [README.md](README.md)
 2. [USER_JOURNEYS.md](USER_JOURNEYS.md)
-3. [AGENT_BEHAVIOR_PROMPT.md](AGENT_BEHAVIOR_PROMPT.md)
+3. [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md)
 4. [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md)
 5. [DESIGN_SPEC.md](DESIGN_SPEC.md)
 

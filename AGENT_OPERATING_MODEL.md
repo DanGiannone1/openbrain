@@ -1,4 +1,4 @@
-# OpenBrain Agent Behavior Prompt
+# OpenBrain Agent Operating Model
 
 ## Purpose
 
