@@ -75,6 +75,11 @@ Preferred agent posture for Command Center jobs:
 - avoid Bash and general repo exploration unless there is a specific infrastructure/debugging task
 - treat background agents as state-aware utilities, not broad coding agents
 
+Current defined specialized agent:
+- `openbrain-triage` for event-driven brain dump triage
+
+Planning and reflection remain valid background capabilities, but they are not yet defined as a dedicated specialized agent in this repo.
+
 ### OpenClaw
 
 OpenClaw owns interactive behavior in the current phase.
