@@ -11,6 +11,8 @@ Open Brain is an MCP server that stores personal life-state documents, generates
 
 This repo owns the MCP server and its deployment surface.
 
+For current runtime ownership across OpenBrain, Command Center, and OpenClaw, use [RUNTIME_ARCHITECTURE.md](C:/projects/openbrain/RUNTIME_ARCHITECTURE.md).
+
 This repo does not own:
 - Telegram ingestion
 - Triage, deduplication, prioritization, or cleanup reasoning
