@@ -97,6 +97,23 @@ Use the MCP tools like this:
 - `raw_query`
   - for advanced read-only inspection when the structured tools are insufficient
 
+## Specialized Agent Access
+
+When a specialized agent exists for a narrow job, prefer constraining it to the minimum OpenBrain MCP tools it actually needs.
+
+In particular, background or utility agents should usually avoid:
+- Bash
+- broad filesystem access
+- web search
+- repo-wide code exploration
+
+The Argus-style pattern is the right default:
+- narrow MCP-only access
+- no generic shell/file tools
+- prompt text and tool allowlist both reinforce the boundary
+
+This keeps background agents grounded in durable state instead of letting them wander through the repo or improvise against unrelated context.
+
 ## Agent-Friendly State
 
 The normal MCP tools already provide a useful cleaned working view for reasoning:

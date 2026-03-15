@@ -70,6 +70,11 @@ Typical responsibilities:
 
 Command Center should not become the source of truth for user state. It should read from OpenBrain and, when appropriate, write durable outputs back through explicit OpenBrain-compatible contracts.
 
+Preferred agent posture for Command Center jobs:
+- use narrowly scoped OpenBrain MCP tools by default
+- avoid Bash and general repo exploration unless there is a specific infrastructure/debugging task
+- treat background agents as state-aware utilities, not broad coding agents
+
 ### OpenClaw
 
 OpenClaw owns interactive behavior in the current phase.
@@ -96,6 +101,10 @@ These should happen in direct response to user interaction:
 Default posture:
 - handle inline in OpenClaw when possible
 - dispatch to Command Center only when the work is heavy, multi-step, or intentionally asynchronous
+
+Likely current fit:
+- brain dump triage should stay primarily event-driven
+- OpenClaw may perform triage inline or immediately dispatch a constrained triage agent job
 
 ### Scheduled flows
 
