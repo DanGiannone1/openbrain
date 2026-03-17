@@ -24,13 +24,11 @@ class Config:
 
     # Cosmos DB
     COSMOS_HOST: str = os.getenv("COSMOS_HOST", "")
-    COSMOS_KEY: str = os.getenv("COSMOS_KEY", "")
     COSMOS_DATABASE: str = os.getenv("COSMOS_DATABASE", "openbrain")
     COSMOS_CONTAINER: str = os.getenv("COSMOS_CONTAINER", "openbrain-data")
 
     # Azure AI Foundry
     AI_FOUNDRY_ENDPOINT: str = os.getenv("AI_FOUNDRY_ENDPOINT", "")
-    AI_FOUNDRY_API_KEY: str = os.getenv("AI_FOUNDRY_API_KEY", "")
     AI_FOUNDRY_EMBEDDING_DEPLOYMENT: str = os.getenv(
         "AI_FOUNDRY_EMBEDDING_DEPLOYMENT", "text-embedding-3-large"
     )
@@ -50,9 +48,7 @@ class Config:
 
         required = {
             "COSMOS_HOST": cls.COSMOS_HOST,
-            "COSMOS_KEY": cls.COSMOS_KEY,
             "AI_FOUNDRY_ENDPOINT": cls.AI_FOUNDRY_ENDPOINT,
-            "AI_FOUNDRY_API_KEY": cls.AI_FOUNDRY_API_KEY,
         }
         missing = [name for name, value in required.items() if not value]
         if missing:

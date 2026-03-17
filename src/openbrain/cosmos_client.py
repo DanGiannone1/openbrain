@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from azure.cosmos import ContainerProxy, CosmosClient, DatabaseProxy
 from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFoundError
+from azure.identity import DefaultAzureCredential
 
 from openbrain.config import Config
 from openbrain.utils.errors import CosmosDBError, DocumentNotFoundError
@@ -24,7 +25,7 @@ def get_cosmos_client() -> CosmosClient:
     global _cosmos_client
     if _cosmos_client is None:
         try:
-            _cosmos_client = CosmosClient(url=Config.COSMOS_HOST, credential=Config.COSMOS_KEY)
+            _cosmos_client = CosmosClient(url=Config.COSMOS_HOST, credential=DefaultAzureCredential())
         except Exception as exc:
             raise CosmosDBError(f"Failed to initialize Cosmos client: {exc}") from exc
     return _cosmos_client

@@ -49,18 +49,6 @@ $acrLoginServer = Invoke-AzTsv -Arguments @(
     "--name", $acrName,
     "--query", "loginServer"
 )
-$acrUser = Invoke-AzTsv -Arguments @(
-    "acr", "credential", "show",
-    "--resource-group", $acrResourceGroup,
-    "--name", $acrName,
-    "--query", "username"
-)
-$acrPassword = Invoke-AzTsv -Arguments @(
-    "acr", "credential", "show",
-    "--resource-group", $acrResourceGroup,
-    "--name", $acrName,
-    "--query", "passwords[0].value"
-)
 $image = "${acrLoginServer}/${imagePrefix}:$ImageTag"
 
 Write-Step "Deploying image $image to Container App $appName"
@@ -76,8 +64,7 @@ if ($appId) {
         --resource-group $resourceGroup `
         --name $appName `
         --server $acrLoginServer `
-        --username $acrUser `
-        --password $acrPassword `
+        --identity system `
         --output none
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to update Container App registry credentials."
@@ -110,8 +97,7 @@ else {
         --min-replicas $MinReplicas `
         --max-replicas $MaxReplicas `
         --registry-server $acrLoginServer `
-        --registry-username $acrUser `
-        --registry-password $acrPassword `
+        --registry-identity system `
         --env-vars "PORT=8000" `
         --output none
     if ($LASTEXITCODE -ne 0) {

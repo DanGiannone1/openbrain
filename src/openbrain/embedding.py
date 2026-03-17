@@ -1,5 +1,6 @@
 """Azure AI Foundry embedding client using OpenAI v1 API."""
 
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from openai import OpenAI
 
 from openbrain.config import Config
@@ -14,8 +15,11 @@ def get_embedding_client() -> OpenAI:
         base_url = Config.AI_FOUNDRY_ENDPOINT.rstrip("/")
         if not base_url.endswith("/openai/v1"):
             base_url = f"{base_url}/openai/v1/"
+        token_provider = get_bearer_token_provider(
+            DefaultAzureCredential(), "https://ai.azure.com/.default"
+        )
         _client = OpenAI(
-            api_key=Config.AI_FOUNDRY_API_KEY,
+            api_key=token_provider,
             base_url=base_url,
         )
     return _client

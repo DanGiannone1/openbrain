@@ -71,12 +71,6 @@ $cosmosHost = Invoke-AzTsv -Arguments @(
     "--name", $cosmosAccountName,
     "--query", "documentEndpoint"
 )
-$cosmosKey = Invoke-AzTsv -Arguments @(
-    "cosmosdb", "keys", "list",
-    "--resource-group", $resourceGroup,
-    "--name", $cosmosAccountName,
-    "--query", "primaryMasterKey"
-)
 
 if (-not $AiResourceName) {
     if ($state.ContainsKey("aiServicesName") -and $state.aiServicesName) {
@@ -116,13 +110,6 @@ if (-not $embeddingDeploymentId) {
     throw "Embedding deployment '$EmbeddingDeployment' does not exist on '$AiResourceName'."
 }
 
-$aiKey = Invoke-AzTsv -Arguments @(
-    "cognitiveservices", "account", "keys", "list",
-    "--resource-group", $resourceGroup,
-    "--name", $AiResourceName,
-    "--query", "key1"
-)
-
 Write-Step "Ensuring system-assigned managed identity on Container App $appName"
 & az containerapp identity assign `
     --resource-group $resourceGroup `
@@ -143,6 +130,8 @@ if (-not $containerAppPrincipalId) {
     throw "Container App '$appName' does not expose a managed identity principal id."
 }
 
+# --- RBAC: Azure AI / Cognitive Services ---
+
 $aiResourceId = Invoke-AzTsv -Arguments @(
     "cognitiveservices", "account", "show",
     "--resource-group", $resourceGroup,
@@ -158,6 +147,30 @@ Ensure-RoleAssignment `
     -PrincipalObjectId $containerAppPrincipalId `
     -RoleName "Cognitive Services OpenAI User" `
     -Scope $aiResourceId
+
+# --- RBAC: Cosmos DB data-plane ---
+
+Write-Step "Ensuring Container App identity has Cosmos DB data-plane access"
+$existingCosmosRole = Try-Get-AzTsv -Arguments @(
+    "cosmosdb", "sql", "role", "assignment", "list",
+    "--account-name", $cosmosAccountName,
+    "--resource-group", $resourceGroup,
+    "--query", "[?principalId=='$containerAppPrincipalId'] | [0].id"
+)
+if (-not $existingCosmosRole) {
+    & az cosmosdb sql role assignment create `
+        --account-name $cosmosAccountName `
+        --resource-group $resourceGroup `
+        --role-definition-id "00000000-0000-0000-0000-000000000002" `
+        --principal-id $containerAppPrincipalId `
+        --scope "/" `
+        --output none
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to assign Cosmos DB Built-in Data Contributor role to Container App identity."
+    }
+}
+
+# --- API token ---
 
 $OpenBrainApiToken = if ($OpenBrainApiToken) {
     $OpenBrainApiToken
@@ -177,8 +190,6 @@ Write-Step "Setting Container App secrets"
     --resource-group $resourceGroup `
     --name $appName `
     --secrets `
-    "cosmos-key=$cosmosKey" `
-    "ai-foundry-api-key=$aiKey" `
     "openbrain-api-token=$OpenBrainApiToken" `
     --output none
 if ($LASTEXITCODE -ne 0) {
@@ -191,11 +202,9 @@ Write-Step "Setting Container App environment variables"
     --name $appName `
     --set-env-vars `
     "COSMOS_HOST=$cosmosHost" `
-    "COSMOS_KEY=secretref:cosmos-key" `
     "COSMOS_DATABASE=$cosmosDatabase" `
     "COSMOS_CONTAINER=$cosmosContainer" `
     "AI_FOUNDRY_ENDPOINT=$($aiEndpoint.TrimEnd('/'))" `
-    "AI_FOUNDRY_API_KEY=secretref:ai-foundry-api-key" `
     "AI_FOUNDRY_EMBEDDING_DEPLOYMENT=$EmbeddingDeployment" `
     "DISABLE_AUTH=$($DisableAuth.ToString().ToLowerInvariant())" `
     "DEFAULT_USER_ID=$DefaultUserId" `
