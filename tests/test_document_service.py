@@ -51,10 +51,10 @@ class TestWriteDocument:
             "dev-user",
             {"docType": "userSettings", "tagTaxonomy": ["personal", "soligence", "microsoft"]},
         )
-        created = mock_cosmos.create_item.call_args[0][0]
+        upserted = mock_cosmos.upsert_item.call_args[0][0]
         assert result["id"] == "userSettings:dev-user"
-        assert created["id"] == "userSettings:dev-user"
-        assert created["tagTaxonomy"] == ["personal", "soligence", "microsoft"]
+        assert upserted["id"] == "userSettings:dev-user"
+        assert upserted["tagTaxonomy"] == ["personal", "soligence", "microsoft"]
 
     def test_unknown_doc_type_fails(self):
         with pytest.raises(ValidationError):

@@ -107,9 +107,13 @@ def write_document(user_id: str, document: dict) -> dict:
     doc["userId"] = user_id
     doc["createdAt"] = now
     doc["updatedAt"] = now
-    doc["embedding"] = generate_embedding(doc)
+    if document_requires_embedding(doc):
+        doc["embedding"] = generate_embedding(doc)
 
-    cosmos_client.create_item(doc)
+    if doc_type == "userSettings":
+        cosmos_client.upsert_item(doc)
+    else:
+        cosmos_client.create_item(doc)
     return {"status": "created", "id": doc["id"], "docType": doc_type}
 
 
@@ -152,10 +156,11 @@ def query_documents(
 
     where_clause = " AND ".join(conditions)
     direction = "DESC" if sort_desc else "ASC"
-    sql = f"SELECT * FROM c WHERE {where_clause} ORDER BY c.{sort_by} {direction}"
+    sql = f"SELECT TOP @limit * FROM c WHERE {where_clause} ORDER BY c.{sort_by} {direction}"
+    params.append({"name": "@limit", "value": limit})
 
     results = cosmos_client.query_items(sql, params, partition_key=user_id, max_item_count=limit)
-    stripped = [_strip(doc) for doc in results[:limit]]
+    stripped = [_strip(doc) for doc in results]
     return {"results": stripped, "total": len(stripped)}
 
 
@@ -255,9 +260,7 @@ def update_document(user_id: str, doc_id: str, updates: dict) -> dict:
     doc["updatedAt"] = _now_iso()
     validated = _model_validate(doc["docType"], doc)
     upsert_doc = validated.model_dump()
-    if document_requires_embedding(doc):
-        upsert_doc["embedding"] = doc.get("embedding", [])
-    elif "embedding" in doc:
+    if "embedding" in doc:
         upsert_doc["embedding"] = doc.get("embedding", [])
 
     cosmos_client.upsert_item(upsert_doc)
