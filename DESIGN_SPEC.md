@@ -11,7 +11,7 @@ Open Brain is an MCP server that stores personal life-state documents, generates
 
 This repo owns the MCP server and its deployment surface.
 
-For current runtime ownership across OpenBrain, Command Center, and OpenClaw, use [RUNTIME_ARCHITECTURE.md](C:/projects/openbrain/RUNTIME_ARCHITECTURE.md).
+For current runtime ownership, see [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md).
 
 This repo does not own:
 - Telegram ingestion
@@ -361,39 +361,39 @@ Implementation guidance:
 `text-embedding-3-large` is the default target for MVP.
 
 Current architecture decision:
-- use the `openai` Python package with the `OpenAI` client
-- use OpenAI v1 endpoints
+- use the `openai` Python package with the `AzureOpenAI` client
+- authenticate via `DefaultAzureCredential` and `get_bearer_token_provider` (no API keys)
 - do not use the Responses API for embeddings
-- use API key authentication for embeddings for now
 
 ### Runtime client contract
 
-The implementation target for embeddings is the OpenAI v1 API.
+The implementation uses the `AzureOpenAI` client with Azure AD token-based authentication.
 
-The server stores the Foundry resource base endpoint in `AI_FOUNDRY_ENDPOINT` and normalizes it to an OpenAI v1 base URL at runtime.
+The server stores the Foundry resource base endpoint in `AI_FOUNDRY_ENDPOINT` and passes it as `azure_endpoint` to the `AzureOpenAI` client (no manual URL normalization needed).
 
 Accepted base endpoint shapes:
 - `https://<resource>.services.ai.azure.com/`
 - `https://<resource>.openai.azure.com/`
 
 Canonical implementation choice:
-- prefer the `OpenAI` client over `AzureOpenAI`
+- use `AzureOpenAI` with `azure_ad_token_provider` for secretless authentication
 - use `client.embeddings.create(...)` for embeddings
 - do not model embeddings around the Responses API
-- keep API key auth as the MVP path because current Microsoft docs still document API key auth for embeddings with OpenAI v1
 
 Implementation target:
 
 ```python
-from openai import OpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from openai import AzureOpenAI
 
-base_url = Config.AI_FOUNDRY_ENDPOINT.rstrip("/")
-if not base_url.endswith("/openai/v1"):
-    base_url = f"{base_url}/openai/v1/"
+token_provider = get_bearer_token_provider(
+    DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+)
 
-client = OpenAI(
-    api_key=Config.AI_FOUNDRY_API_KEY,
-    base_url=base_url,
+client = AzureOpenAI(
+    azure_ad_token_provider=token_provider,
+    azure_endpoint=Config.AI_FOUNDRY_ENDPOINT,
+    api_version="2024-06-01",
 )
 
 response = client.embeddings.create(
@@ -584,14 +584,13 @@ Example response shape:
 | Variable | Purpose |
 |---|---|
 | `COSMOS_HOST` | Cosmos account endpoint |
-| `COSMOS_KEY` | Cosmos primary key for current bootstrap |
 | `COSMOS_DATABASE` | Database name |
 | `COSMOS_CONTAINER` | Container name |
 | `AI_FOUNDRY_ENDPOINT` | Foundry resource base endpoint |
-| `AI_FOUNDRY_API_KEY` | Foundry / Azure OpenAI API key |
 | `AI_FOUNDRY_EMBEDDING_DEPLOYMENT` | Embedding deployment name |
 | `DISABLE_AUTH` | Enable MVP dev-mode auth bypass |
 | `DEFAULT_USER_ID` | User ID used when auth is disabled |
+| `OPENBRAIN_API_TOKEN` | Static bearer token for API authentication |
 | `ENVIRONMENT` | `dev`, `prod`, or `test` |
 | `LOG_LEVEL` | Application logging level |
 | `PORT` | HTTP port |
@@ -601,18 +600,20 @@ Example response shape:
 ```ini
 # Cosmos DB
 COSMOS_HOST=https://your-cosmos-account.documents.azure.com:443/
-COSMOS_KEY=your-cosmos-primary-key
 COSMOS_DATABASE=openbrain
 COSMOS_CONTAINER=openbrain-data
 
 # Azure AI Foundry
 AI_FOUNDRY_ENDPOINT=https://your-resource.services.ai.azure.com/
-AI_FOUNDRY_API_KEY=your-api-key
 AI_FOUNDRY_EMBEDDING_DEPLOYMENT=text-embedding-3-large
 
 # Auth
-DISABLE_AUTH=true
+# Both Cosmos DB and AI Foundry use DefaultAzureCredential:
+#   Local: authenticates via `az login`
+#   Azure: authenticates via system-assigned managed identity
+DISABLE_AUTH=false
 DEFAULT_USER_ID=dev-user
+OPENBRAIN_API_TOKEN=replace-with-a-strong-random-token
 
 # Server
 ENVIRONMENT=dev
@@ -622,14 +623,11 @@ PORT=8000
 
 ### Auth stance
 
-Current implementation target:
-- dev mode may use `DISABLE_AUTH=true`
-- hosted production should move toward managed identity and secretless access where possible
-
-First hardening targets after MVP:
-1. managed identity for Azure-hosted workloads
-2. Key Vault or managed secret references
-3. removal of raw API keys from app env vars where Azure supports it
+Current implementation:
+- both Cosmos DB and AI Foundry authenticate via `DefaultAzureCredential` (no API keys)
+- locally, this resolves to `az login`; in Azure, it resolves to system-assigned managed identity
+- API authentication uses a static bearer token (`OPENBRAIN_API_TOKEN`)
+- dev mode may use `DISABLE_AUTH=true` to bypass API token validation
 
 ## 9. Infrastructure and Deployment
 

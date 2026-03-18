@@ -30,9 +30,7 @@ These instructions override your default model behavior. What the developer spec
 
 These triggers apply once the corresponding skills exist under `.claude/skills/`.
 
-1. **Testing work requires the testing skill.** If writing, changing, or reviewing tests, read `.claude/skills/testing/SKILL.md` first.
-2. **Code changes require data model context.** If touching code or contracts, read `.claude/skills/data-models/SKILL.md` and confirm the source-of-truth model first.
-3. **Architecture-sensitive changes require architecture context.** If changing system boundaries or behavior, load relevant architecture docs or skills before editing.
+1. **Code changes require data model context.** If touching code or contracts, read `.claude/skills/data-models/SKILL.md` and confirm the source-of-truth model first.
 
 ## Skills Table
 
@@ -40,10 +38,7 @@ Update this table whenever skills are added, removed, or renamed.
 
 | Skill | When to Use |
 |---|---|
-| `.claude/skills/git-workflow/SKILL.md` | Branch management, SDLC flow, commit, push, PR workflow |
-| `.claude/skills/testing/SKILL.md` | Testing strategy and validation depth |
 | `.claude/skills/data-models/SKILL.md` | Data model and schema changes |
-| `.claude/skills/github-issues/SKILL.md` | Issue triage and backlog operations |
 
 Repo status: `.claude/skills/` is present in this repository. Current repo-local skill: `.claude/skills/data-models/SKILL.md`.
 

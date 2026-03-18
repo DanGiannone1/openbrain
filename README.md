@@ -89,26 +89,19 @@ Behavior is intentionally documented at two levels:
 
 Those documents define capability and posture, not hard operational cadences. Exact timing for reminders, check-ins, and resurfacing should be shaped by user preference and iteration rather than treated as fixed product truth.
 
-Start here:
-- high-level product and repo framing: [README.md](README.md)
-- expected behavior and requirements: [USER_JOURNEYS.md](USER_JOURNEYS.md)
-- agent operating posture: [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md)
-- current runtime ownership and flow boundaries: [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md)
-- product and repo contract: [DESIGN_SPEC.md](DESIGN_SPEC.md)
-- local MCP/tooling setup: [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md)
-
 ## Documentation Map
 
 | Document | Role |
 |---|---|
 | [USER_JOURNEYS.md](USER_JOURNEYS.md) | User-facing and agent-facing expected behavior |
-| [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md) | Current OpenBrain vs Command Center vs OpenClaw ownership and flow boundaries |
+| [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md) | Current OpenBrain vs OpenClaw ownership and flow boundaries |
 | [DESIGN_SPEC.md](DESIGN_SPEC.md) | Source of truth for architecture, schemas, and behavioral rules |
 | [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md) | Shared agent posture, authority boundaries, and reasoning-vs-determinism guide |
 | [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md) | Repo MCP configuration and local tooling setup |
 | [CLAUDE.md](CLAUDE.md) | Claude repo operating rules |
 | [AGENTS.md](AGENTS.md) | Codex repo operating rules |
 | [.claude/hooks/README.md](.claude/hooks/README.md) | Claude hook wiring and purpose |
+| [prompts/](prompts/) | Agent prompt templates (heartbeat, daily briefing, nightly ping) |
 
 Code locations:
 - [src/openbrain/models](src/openbrain/models): Pydantic document shapes
@@ -140,7 +133,7 @@ When there is tension between docs, use this order:
 6. runtime code in `src/openbrain/`
 7. tests
 
-`README.md` gives the high-level product and repo framing. `USER_JOURNEYS.md` captures desired product behavior. `AGENT_OPERATING_MODEL.md` captures the shared agent operating posture. `RUNTIME_ARCHITECTURE.md` explains the current split runtime. `DESIGN_SPEC.md` captures the implementation contract.
+`README.md` gives the high-level product and repo framing. `USER_JOURNEYS.md` captures desired product behavior. `AGENT_OPERATING_MODEL.md` captures the shared agent operating posture. `RUNTIME_ARCHITECTURE.md` explains the current two-system runtime. `DESIGN_SPEC.md` captures the implementation contract.
 
 ## Logical Reading Order
 
