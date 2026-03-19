@@ -12,16 +12,16 @@ Use it to answer:
 
 This document is intentionally high level. It should define capabilities, posture, and expected behavior, not lock the product into exact reminder cadences or orchestration mechanics too early.
 
-This is not the implementation contract. For exact schemas, API/tool behavior, and server rules, use [DESIGN_SPEC.md](C:/projects/openbrain/DESIGN_SPEC.md).
+This is not the implementation contract. For exact schemas, API/tool behavior, and server rules, use [DESIGN_SPEC.md](DESIGN_SPEC.md).
 
 ## Document Role
 
 Use the top-level docs like this:
-- [README.md](C:/projects/openbrain/README.md): high-level product context and repo framing
-- [USER_JOURNEYS.md](C:/projects/openbrain/USER_JOURNEYS.md): expected behavior and requirements
-- [AGENT_OPERATING_MODEL.md](C:/projects/openbrain/AGENT_OPERATING_MODEL.md): shared agent posture and action authority
-- [RUNTIME_ARCHITECTURE.md](C:/projects/openbrain/RUNTIME_ARCHITECTURE.md): current runtime ownership and flow boundaries
-- [DESIGN_SPEC.md](C:/projects/openbrain/DESIGN_SPEC.md): implementation contract
+- [README.md](README.md): high-level product context and repo framing
+- [USER_JOURNEYS.md](USER_JOURNEYS.md): expected behavior and requirements
+- [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md): shared agent posture and action authority
+- [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md): current runtime ownership and flow boundaries
+- [DESIGN_SPEC.md](DESIGN_SPEC.md): implementation contract
 
 If a journey here is desired but not yet reflected in the design spec, update the design spec before changing code.
 
@@ -233,68 +233,9 @@ That said, the system still should not:
 - create surprise tasks
 - alter important state without a reason that could be explained to the user
 
-## Action Authority Model
+## Action Authority and Behavior Preferences
 
-OpenBrain should separate proactive outreach from structural change.
-
-### Automatic actions
-
-These are safe to surface automatically when grounded in real state:
-- due soon reminders
-- overdue reminders
-- recurring-task reminders
-- stale goal nudges
-- stale idea resurfacing
-- planning summaries
-- lightweight check-ins
-- contextual recall during active conversations
-
-### Confirmation-first actions
-
-These should normally be suggested first and applied only after the user agrees:
-- creating new tasks from a goal
-- linking tasks to goals
-- turning a vague thought into a goal or task with higher commitment
-- retagging or reorganizing important records
-- updating an existing memory when the change is meaningful but not obvious
-- applying a proposed focus plan as actual state changes
-
-### Never-do-silently actions
-
-These should never happen without explicit user approval:
-- deleting records
-- creating surprise obligations
-- materially changing due dates
-- cancelling or abandoning goals or tasks
-- destructive merges
-- reclassifying important records in a way the user would find surprising
-
-## Behavior Preferences And Adaptation
-
-The system should let the user shape behavior over time rather than forcing one fixed personality.
-
-### Preference areas
-
-The user should be able to tune:
-- how proactive the system is
-- whether reminders are desired and how aggressive they should feel
-- whether check-ins are wanted
-- whether planning support is wanted
-- how strongly stale goals should be resurfaced
-- how strongly old ideas should be resurfaced
-- how assertive the agent should be when suggesting next steps
-- when the system should ask before making structural changes
-
-### Preference learning
-
-The system should also learn from repeated user feedback such as:
-- "be more proactive"
-- "stop reminding me about this so often"
-- "ask me before creating tasks"
-- "surface ideas more often"
-- "planning summaries are useful"
-
-Over time, the system should become better calibrated to the user's real tolerance and preferences without drifting into hidden autonomous behavior.
+For the action authority model (what agents may do automatically, what requires confirmation, and what requires explicit approval) and for behavior preference shaping, see [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md).
 
 ## User-Initiated Journeys
 

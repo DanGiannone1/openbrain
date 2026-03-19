@@ -1,39 +1,19 @@
 # openbrain
 
-OpenBrain is an MCP server plus Azure deployment surface for storing and retrieving personal knowledge, ideas, goals, and tasks.
+OpenBrain is an AI-native second brain — an MCP server on Azure for capturing and retrieving personal knowledge, ideas, goals, and tasks without heavy manual organization.
 
-It is a low-friction, AI-native second brain for capturing and retrieving personal knowledge, ideas, goals, and tasks without forcing heavy manual organization.
+## Why This Exists
 
-## Repo Boundary
+Most second-brain tools are passive archives. You put things in and hope you remember to look. OpenBrain is designed to be active — it captures, organizes, recalls, tracks, coaches, and prompts.
 
-This repository owns:
-- the MCP server
-- the Azure deployment surface
-- the document model and server-side mutation rules
+At the highest level, OpenBrain exists to do six things:
 
-This repository does not own:
-- Telegram or any other ingestion client
-- external schedulers or orchestrators
-- reminder delivery
-- agent-side classification, prioritization, or cleanup decisions
-- a human-facing UI
-
-## What OpenBrain Does
-
-At the highest level, OpenBrain exists to do six things for the user:
-
-1. Capture
-   Get facts, ideas, goals, and tasks out of the user's head with very little friction.
-2. Organize
-   Keep stored information coherent over time through classification, cleanup, and lightweight structure.
-3. Recall
-   Answer natural-language questions about what the user has previously captured.
-4. Track
-   Maintain operational state for one-time tasks, recurring tasks, and goals.
-5. Coach
-   Help the user make progress on important goals without turning the system into a rigid productivity app.
-6. Prompt
-   Provide useful proactive outreach such as reminders, stale-goal nudges, and planning support.
+1. **Capture** — get facts, ideas, goals, and tasks out of your head with very little friction.
+2. **Organize** — keep stored information coherent over time through classification, cleanup, and lightweight structure.
+3. **Recall** — answer natural-language questions about what you have previously captured.
+4. **Track** — maintain operational state for one-time tasks, recurring tasks, and goals.
+5. **Coach** — help you make progress on important goals without turning the system into a rigid productivity app.
+6. **Prompt** — provide useful proactive outreach such as reminders, stale-goal nudges, and planning support.
 
 The intended product stance is:
 - more active than a passive archive
@@ -41,18 +21,53 @@ The intended product stance is:
 - useful as an organized assistant
 - eventually capable of acting like a lightweight chief of staff
 
-## Product Experience
+The product experience should feel like:
+- **Low-friction capture** — brain dump facts, ideas, goals, and tasks without navigating a rigid UI.
+- **Reliable recall** — ask natural-language questions later and get the right information back.
+- **Structured state where needed** — goals and tasks support lightweight tracking without turning into a full planning engine.
+- **Agent-assisted organization** — external agents classify, update, prioritize, and remind, but those behaviors sit on top of the server rather than inside it.
 
-The intended product experience is:
+For detailed behavioral requirements and user journeys, see [USER_JOURNEYS.md](USER_JOURNEYS.md).
 
-1. Low-friction capture
-   Users should be able to brain dump facts, ideas, goals, and tasks without navigating a rigid UI.
-2. Reliable recall
-   Users should be able to ask natural-language questions later and retrieve the right stored information.
-3. Structured state where needed
-   Goals and tasks should support lightweight tracking without turning the MCP server into a full planning engine.
-4. Agent-assisted organization
-   External agents may help classify, update, prioritize, or remind, but those behaviors sit on top of the MCP server rather than inside it.
+## How It Is Built
+
+OpenBrain is an MCP server backed by Azure Cosmos DB with built-in vector search.
+
+**Data store.** A single Cosmos DB container holds all documents, partitioned by user. Six document types — `memory`, `idea`, `task`, `goal`, `misc`, and `userSettings` — cover everything from factual recall to recurring task state to user preferences. The schema is flexible: unknown fields survive round-trip storage, and ambiguous input is preserved without forced classification.
+
+**MCP tool surface.** The server exposes exactly seven tools: `write`, `read`, `query`, `search`, `update`, `delete`, and `raw_query`. These are generic, document-shaped operations — not domain-specific endpoints. Any agent or client that speaks MCP can connect to the same brain.
+
+**Embeddings and vector search.** `memory` and `idea` documents are embedded using Azure OpenAI's `text-embedding-3-large` model (3072 dimensions, cosine distance, diskANN index). The server generates embeddings internally — clients send text, never vectors. Semantic search is intentionally narrower than the full document store: tasks and goals are operational records handled through structured `query`, not vector search.
+
+**Authentication.** Both Cosmos DB and Azure OpenAI authenticate via `DefaultAzureCredential` — no API keys in the system. Locally this resolves to `az login`; in Azure it resolves to system-assigned managed identity.
+
+**Hosting.** The MCP server runs on Azure Container Apps with external HTTP ingress. It supports both `stdio` (local development) and `streamable-http` (hosted) transports.
+
+For the full implementation contract — schemas, tool behavior, deployment details — see [DESIGN_SPEC.md](DESIGN_SPEC.md).
+
+## How It Runs Today
+
+The current phase uses a two-system architecture:
+
+- **OpenBrain** — the data layer. Stores, embeds, queries, and mutates documents. Handles deterministic behavior like recurring-task rollover. Does not make business decisions.
+- **OpenClaw** — the orchestration layer. Owns the user gateway (a Telegram bot today), agent runtime, scheduled jobs (daily briefing, nightly ping, heartbeat), triage decisions, and proactive outreach.
+
+The flow is straightforward: the user interacts with OpenClaw, OpenClaw calls OpenBrain's MCP tools for storage and retrieval, and any durable state remains anchored in OpenBrain. OpenClaw is the execution surface; OpenBrain is the canonical data contract.
+
+This split is intentional for speed, cost, and time-to-production. It is not necessarily the final product shape.
+
+For the full ownership table and flow details, see [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md).
+
+## Where It Is Going
+
+The current two-system architecture is a pragmatic starting point, not a permanent commitment.
+
+Because OpenBrain exposes a standard MCP interface, the orchestration layer is replaceable. Possible future directions include:
+- consolidating into a single self-contained application that owns both data and agent runtime
+- swapping the orchestration layer for a different agent framework or platform
+- adding new ingestion channels without changing the data layer
+
+The MCP protocol is what makes this flexibility possible. The data contract and document model are stable regardless of which runtime sits on top.
 
 ## Conceptual Model
 
@@ -83,11 +98,23 @@ Reminders are not a stored document type. They are external behavior layered on 
 - The schema should stay flexible enough to preserve weird or incomplete input without breaking.
 - The system should reduce friction, not add workflow burden.
 
-Behavior is intentionally documented at two levels:
-- [USER_JOURNEYS.md](USER_JOURNEYS.md) describes what the system should do for the user
-- [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md) describes how agents layered on top of OpenBrain should behave
+Agent behavior is documented separately:
+- [USER_JOURNEYS.md](USER_JOURNEYS.md) defines what the system should do for the user.
+- [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md) defines how agents layered on top of OpenBrain should behave.
 
-Those documents define capability and posture, not hard operational cadences. Exact timing for reminders, check-ins, and resurfacing should be shaped by user preference and iteration rather than treated as fixed product truth.
+## Repo Boundary
+
+This repository owns:
+- the MCP server
+- the Azure deployment surface
+- the document model and server-side mutation rules
+
+This repository does not own:
+- Telegram or any other ingestion client
+- external schedulers or orchestrators
+- reminder delivery
+- agent-side classification, prioritization, or cleanup decisions
+- a human-facing UI
 
 ## Documentation Map
 
@@ -135,18 +162,12 @@ When there is tension between docs, use this order:
 
 `README.md` gives the high-level product and repo framing. `USER_JOURNEYS.md` captures desired product behavior. `AGENT_OPERATING_MODEL.md` captures the shared agent operating posture. `RUNTIME_ARCHITECTURE.md` explains the current two-system runtime. `DESIGN_SPEC.md` captures the implementation contract.
 
-## Logical Reading Order
+## MCP Configuration
 
-If you are trying to understand the repo end to end, read the docs in this order:
-
-1. [README.md](README.md)
-2. [USER_JOURNEYS.md](USER_JOURNEYS.md)
-3. [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md)
-4. [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md)
-5. [DESIGN_SPEC.md](DESIGN_SPEC.md)
-
-This repo now includes a checked-in `.mcp.json` for:
+This repo includes a checked-in `.mcp.json` for:
 
 - Open Brain local MCP server
 - Azure MCP Server
 - Microsoft Learn MCP Server
+
+See [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md) for details.

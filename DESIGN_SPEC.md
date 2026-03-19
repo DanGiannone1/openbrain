@@ -1,7 +1,7 @@
 # Open Brain: Technical Design Specification
 
-> Version: 3.4
-> Date: 2026-03-12
+> Version: 3.5
+> Date: 2026-03-19
 > Status: Baseline for implementation
 > Repository: `openbrain`
 

@@ -121,6 +121,17 @@ The same authority model from the behavior docs applies in this split runtime:
 
 That rule holds whether the action is triggered by OpenClaw inline or a scheduled job.
 
+## Future Direction
+
+The current two-system architecture is a pragmatic starting point, not a permanent commitment.
+
+Because OpenBrain exposes a standard MCP interface, the orchestration layer is replaceable. Possible future directions include:
+- consolidating into a single self-contained application that owns both data and agent runtime
+- swapping the orchestration layer for a different agent framework or platform
+- adding new ingestion channels without changing the data layer
+
+The MCP protocol is what makes this flexibility possible. The data contract and document model are stable regardless of which runtime sits on top.
+
 ## Important Constraint
 
 OpenBrain should remain the canonical product contract even while runtime behavior is split across systems.
