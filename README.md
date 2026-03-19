@@ -43,6 +43,14 @@ For the full implementation contract — schemas, tool behavior, deployment deta
 
 The current phase uses a two-system architecture:
 
+```mermaid
+graph LR
+    User(("👤 User")) --> Channels["Telegram\n(+ future channels)"]
+    Channels --> OpenClaw["OpenClaw\nOrchestration Layer\n\nAgent Runtime\nScheduled Jobs\nTriage & Outreach"]
+    OpenClaw -->|"MCP Protocol"| OpenBrain["OpenBrain\nData Layer\n\nMCP Server\nDocument Storage\nVector Search"]
+    OpenBrain --> Azure[("Azure\n\nCosmos DB\nAzure OpenAI")]
+```
+
 - **OpenBrain** — the data layer. Stores, embeds, queries, and mutates documents. Handles deterministic behavior like recurring-task rollover. Does not make business decisions.
 - **OpenClaw** — the orchestration layer. Owns the user gateway (a Telegram bot today), agent runtime, scheduled jobs (daily briefing, nightly ping, heartbeat), triage decisions, and proactive outreach.
 
@@ -62,6 +70,15 @@ Because the data layer exposes a standard MCP interface, the orchestration layer
 ## Conceptual Model
 
 OpenBrain separates semantic recall from operational state.
+
+```mermaid
+graph TB
+    Input(("Raw Input")) --> Triage["Agent Triage\n(classify, deduplicate)"]
+    Triage --> Semantic["Semantic Recall\nmemory · idea"]
+    Triage --> Operational["Operational State\ntask · goal · misc"]
+    Semantic -->|"embedded"| VectorSearch["Vector Search"]
+    Operational --> StructuredQuery["Structured Query"]
+```
 
 Semantic recall:
 - `memory`: factual or reference information you want to recall later
