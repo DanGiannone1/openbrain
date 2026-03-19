@@ -1,6 +1,6 @@
-# openbrain
+# OpenBrain
 
-OpenBrain is an AI-native second brain — an MCP server on Azure for capturing and retrieving personal knowledge, ideas, goals, and tasks without heavy manual organization.
+OpenBrain is an AI-native second brain for capturing, organizing, and retrieving personal knowledge, ideas, goals, and tasks — without heavy manual organization.
 
 ## Why This Exists
 
@@ -30,8 +30,8 @@ OpenBrain separates semantic recall from operational state.
 ```mermaid
 graph TB
     Input(("Raw Input")) --> Triage["Agent Triage\n(classify, deduplicate)"]
-    Triage --> Semantic["Semantic Recall\nmemory · idea"]
-    Triage --> Operational["Operational State\ntask · goal · misc"]
+    Triage --> Semantic["Semantic Recall\nmemory, idea"]
+    Triage --> Operational["Operational State\ntask, goal, misc"]
     Semantic <-->|"embedded"| VectorSearch["Vector Search"]
     Operational <--> StructuredQuery["Structured Query"]
 ```
@@ -62,7 +62,13 @@ The current phase uses a two-system architecture:
 graph LR
     User(("👤 User")) <--> Channels["Telegram\n(+ future channels)"]
     Channels <--> OpenClaw["OpenClaw\nAgent Runtime\n\nTriage & Classification\nScheduled Jobs\nProactive Outreach"]
-    OpenClaw <-->|"MCP Protocol"| OpenBrain["OpenBrain\nData Layer\n\nCosmos DB\nAzure OpenAI\nContainer Apps"]
+    OpenClaw <-->|"MCP Protocol"| MCP
+
+    subgraph OpenBrain["OpenBrain — Data Layer"]
+        MCP["MCP Server\n(Container Apps)"]
+        DB[("Cosmos DB\nAzure OpenAI")]
+        MCP <--> DB
+    end
 ```
 
 - **OpenBrain** — the data layer. Stores, embeds, queries, and mutates documents. Handles deterministic behavior like recurring-task rollover. Does not make business decisions.
