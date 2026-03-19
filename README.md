@@ -72,7 +72,12 @@ graph LR
 ```
 
 - **OpenBrain** — the data layer. Stores, embeds, queries, and mutates documents. Handles deterministic behavior like recurring-task rollover. Does not make business decisions.
-- **OpenClaw** — the agent runtime. Owns the user gateway (a Telegram bot today), triage and classification, scheduled jobs (daily briefing, nightly ping, heartbeat), and proactive outreach.
+- **OpenClaw** — the agent runtime. Owns the user gateway (a Telegram bot today), triage and classification, scheduled jobs, and proactive outreach.
+
+OpenClaw runs three scheduled modes:
+- **Heartbeat** — the always-on conversational mode for triage and recall
+- **Daily briefing** — morning summary of open tasks, overdue items, and stale goals
+- **Nightly ping** — quick end-of-day check-in to capture what got done
 
 The user interacts with OpenClaw, OpenClaw calls OpenBrain's MCP tools for storage and retrieval, and any durable state remains anchored in OpenBrain. OpenClaw is the execution surface; OpenBrain is the canonical data contract.
 
