@@ -21,19 +21,13 @@ The intended product stance is:
 - useful as an organized assistant
 - eventually capable of acting like a lightweight chief of staff
 
-The product experience should feel like:
-- **Low-friction capture** — brain dump facts, ideas, goals, and tasks without navigating a rigid UI.
-- **Reliable recall** — ask natural-language questions later and get the right information back.
-- **Structured state where needed** — goals and tasks support lightweight tracking without turning into a full planning engine.
-- **Agent-assisted organization** — external agents classify, update, prioritize, and remind, but those behaviors sit on top of the server rather than inside it.
-
 For detailed behavioral requirements and user journeys, see [USER_JOURNEYS.md](USER_JOURNEYS.md).
 
 ## How It Is Built
 
 OpenBrain is an MCP server backed by Azure Cosmos DB with built-in vector search.
 
-**Data store.** A single Cosmos DB container holds all documents, partitioned by user. Six document types — `memory`, `idea`, `task`, `goal`, `misc`, and `userSettings` — cover everything from factual recall to recurring task state to user preferences. The schema is flexible: unknown fields survive round-trip storage, and ambiguous input is preserved without forced classification.
+**Data store.** A single Cosmos DB container holds all documents, partitioned by user. Six document types — `memory`, `idea`, `task`, `goal`, `misc`, and `userSettings` — cover everything from factual recall to recurring task state to user preferences. The schema is flexible: unknown fields survive round-trip storage.
 
 **MCP tool surface.** The server exposes exactly seven tools: `write`, `read`, `query`, `search`, `update`, `delete`, and `raw_query`. These are generic, document-shaped operations — not domain-specific endpoints. Any agent or client that speaks MCP can connect to the same brain.
 
@@ -60,14 +54,10 @@ For the full ownership table and flow details, see [RUNTIME_ARCHITECTURE.md](RUN
 
 ## Where It Is Going
 
-The current two-system architecture is a pragmatic starting point, not a permanent commitment.
-
-Because OpenBrain exposes a standard MCP interface, the orchestration layer is replaceable. Possible future directions include:
+Because the data layer exposes a standard MCP interface, the orchestration layer is replaceable. Possible future directions include:
 - consolidating into a single self-contained application that owns both data and agent runtime
 - swapping the orchestration layer for a different agent framework or platform
 - adding new ingestion channels without changing the data layer
-
-The MCP protocol is what makes this flexibility possible. The data contract and document model are stable regardless of which runtime sits on top.
 
 ## Conceptual Model
 
@@ -87,33 +77,20 @@ Recurring tasks use two separate concepts:
 - `recurrenceDays`: cadence
 - `dueDate`: next upcoming occurrence
 
-Marking a recurring task complete should move the next `dueDate` forward. The server stores and mutates that state; it does not decide what should be worked on.
+Marking a recurring task complete moves the next `dueDate` forward automatically.
 
 Reminders are not a stored document type. They are external behavior layered on top of goals and tasks.
 
 ## Golden Rules
 
-- The server stores, embeds, queries, and updates documents. It does not decide what matters.
-- Agents or clients own classification, prioritization, cleanup, and reminder logic.
+- The server is a data layer, not a decision maker. Classification, prioritization, cleanup, and reminder logic belong to agents and clients layered on top.
 - The schema should stay flexible enough to preserve weird or incomplete input without breaking.
 - The system should reduce friction, not add workflow burden.
 
-Agent behavior is documented separately:
-- [USER_JOURNEYS.md](USER_JOURNEYS.md) defines what the system should do for the user.
-- [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md) defines how agents layered on top of OpenBrain should behave.
-
-## Repo Boundary
-
-This repository owns:
-- the MCP server
-- the Azure deployment surface
-- the document model and server-side mutation rules
-
-This repository does not own:
-- Telegram or any other ingestion client
+This repository owns the MCP server, the Azure deployment surface, and the document model. It does not own:
+- ingestion clients (Telegram or otherwise)
 - external schedulers or orchestrators
 - reminder delivery
-- agent-side classification, prioritization, or cleanup decisions
 - a human-facing UI
 
 ## Documentation Map
@@ -122,7 +99,7 @@ This repository does not own:
 |---|---|
 | [USER_JOURNEYS.md](USER_JOURNEYS.md) | User-facing and agent-facing expected behavior |
 | [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md) | Current OpenBrain vs OpenClaw ownership and flow boundaries |
-| [DESIGN_SPEC.md](DESIGN_SPEC.md) | Source of truth for architecture, schemas, and behavioral rules |
+| [DESIGN_SPEC.md](DESIGN_SPEC.md) | Implementation contract for architecture, schemas, and behavioral rules |
 | [AGENT_OPERATING_MODEL.md](AGENT_OPERATING_MODEL.md) | Shared agent posture, authority boundaries, and reasoning-vs-determinism guide |
 | [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md) | Repo MCP configuration and local tooling setup |
 | [CLAUDE.md](CLAUDE.md) | Claude repo operating rules |
@@ -137,18 +114,11 @@ Code locations:
 - [tests/test_document_service.py](tests/test_document_service.py): focused business-logic tests
 - [tests/test_scenarios.py](tests/test_scenarios.py): scenario coverage across document flows
 
-## Where Business Logic Lives
+Business logic flows from spec to code to tests: behavior rules belong in [DESIGN_SPEC.md](DESIGN_SPEC.md) first, then in `document_service.py`, then in tests.
 
-Use this rule of thumb:
+This repo includes a checked-in `.mcp.json` for the local OpenBrain server, Azure MCP Server, and Microsoft Learn MCP Server. See [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md) for details.
 
-- schema and behavior definition: `DESIGN_SPEC.md`
-- server-side business logic: `src/openbrain/services/document_service.py`
-- persistence/query mechanics: `src/openbrain/cosmos_client.py`
-- verification of expected behavior: tests
-
-Example: recurring task rules belong in the spec first, then in `document_service.py`, then in tests. They should not live only in prompts, migration notes, or agent scaffolding.
-
-## Source Of Truth Order
+## Source of Truth Order
 
 When there is tension between docs, use this order:
 
@@ -159,15 +129,3 @@ When there is tension between docs, use this order:
 5. `DESIGN_SPEC.md`
 6. runtime code in `src/openbrain/`
 7. tests
-
-`README.md` gives the high-level product and repo framing. `USER_JOURNEYS.md` captures desired product behavior. `AGENT_OPERATING_MODEL.md` captures the shared agent operating posture. `RUNTIME_ARCHITECTURE.md` explains the current two-system runtime. `DESIGN_SPEC.md` captures the implementation contract.
-
-## MCP Configuration
-
-This repo includes a checked-in `.mcp.json` for:
-
-- Open Brain local MCP server
-- Azure MCP Server
-- Microsoft Learn MCP Server
-
-See [MCP_INTEGRATIONS.md](MCP_INTEGRATIONS.md) for details.
