@@ -23,49 +23,6 @@ The intended product stance is:
 
 For detailed behavioral requirements and user journeys, see [USER_JOURNEYS.md](USER_JOURNEYS.md).
 
-## How It Is Built
-
-OpenBrain is an MCP server backed by Azure Cosmos DB with built-in vector search.
-
-**Data store.** A single Cosmos DB container holds all documents, partitioned by user. Six document types — `memory`, `idea`, `task`, `goal`, `misc`, and `userSettings` — cover everything from factual recall to recurring task state to user preferences. The schema is flexible: unknown fields survive round-trip storage.
-
-**MCP tool surface.** The server exposes exactly seven tools: `write`, `read`, `query`, `search`, `update`, `delete`, and `raw_query`. These are generic, document-shaped operations — not domain-specific endpoints. Any agent or client that speaks MCP can connect to the same brain.
-
-**Embeddings and vector search.** `memory` and `idea` documents are embedded using Azure OpenAI's `text-embedding-3-large` model (3072 dimensions, cosine distance, diskANN index). The server generates embeddings internally — clients send text, never vectors. Semantic search is intentionally narrower than the full document store: tasks and goals are operational records handled through structured `query`, not vector search.
-
-**Authentication.** Both Cosmos DB and Azure OpenAI authenticate via `DefaultAzureCredential` — no API keys in the system. Locally this resolves to `az login`; in Azure it resolves to system-assigned managed identity.
-
-**Hosting.** The MCP server runs on Azure Container Apps with external HTTP ingress. It supports both `stdio` (local development) and `streamable-http` (hosted) transports.
-
-For the full implementation contract — schemas, tool behavior, deployment details — see [DESIGN_SPEC.md](DESIGN_SPEC.md).
-
-## How It Runs Today
-
-The current phase uses a two-system architecture:
-
-```mermaid
-graph LR
-    User(("👤 User")) <--> Channels["Telegram\n(+ future channels)"]
-    Channels <--> OpenClaw["OpenClaw\nAgent Runtime\n\nTriage & Classification\nScheduled Jobs\nProactive Outreach"]
-    OpenClaw <-->|"MCP Protocol"| OpenBrain["OpenBrain\nData Layer\n\nCosmos DB\nAzure OpenAI\nContainer Apps"]
-```
-
-- **OpenBrain** — the data layer. Stores, embeds, queries, and mutates documents. Handles deterministic behavior like recurring-task rollover. Does not make business decisions.
-- **OpenClaw** — the agent runtime. Owns the user gateway (a Telegram bot today), triage and classification, scheduled jobs (daily briefing, nightly ping, heartbeat), and proactive outreach.
-
-The flow is straightforward: the user interacts with OpenClaw, OpenClaw calls OpenBrain's MCP tools for storage and retrieval, and any durable state remains anchored in OpenBrain. OpenClaw is the execution surface; OpenBrain is the canonical data contract.
-
-This split is intentional for speed, cost, and time-to-production. It is not necessarily the final product shape.
-
-For the full ownership table and flow details, see [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md).
-
-## Where It Is Going
-
-Because the data layer exposes a standard MCP interface, the agent runtime is replaceable. Possible future directions include:
-- consolidating into a single self-contained application that owns both data and agent runtime
-- swapping the agent runtime for a different framework or platform
-- adding new ingestion channels without changing the data layer
-
 ## Conceptual Model
 
 OpenBrain separates semantic recall from operational state.
@@ -96,6 +53,43 @@ Recurring tasks use two separate concepts:
 Marking a recurring task complete moves the next `dueDate` forward automatically.
 
 Reminders are not a stored document type. They are external behavior layered on top of goals and tasks.
+
+## How It Works
+
+The current phase uses a two-system architecture:
+
+```mermaid
+graph LR
+    User(("👤 User")) <--> Channels["Telegram\n(+ future channels)"]
+    Channels <--> OpenClaw["OpenClaw\nAgent Runtime\n\nTriage & Classification\nScheduled Jobs\nProactive Outreach"]
+    OpenClaw <-->|"MCP Protocol"| OpenBrain["OpenBrain\nData Layer\n\nCosmos DB\nAzure OpenAI\nContainer Apps"]
+```
+
+- **OpenBrain** — the data layer. Stores, embeds, queries, and mutates documents. Handles deterministic behavior like recurring-task rollover. Does not make business decisions.
+- **OpenClaw** — the agent runtime. Owns the user gateway (a Telegram bot today), triage and classification, scheduled jobs (daily briefing, nightly ping, heartbeat), and proactive outreach.
+
+The user interacts with OpenClaw, OpenClaw calls OpenBrain's MCP tools for storage and retrieval, and any durable state remains anchored in OpenBrain. OpenClaw is the execution surface; OpenBrain is the canonical data contract.
+
+**Data store.** A single Cosmos DB container holds all documents, partitioned by user. Six document types — `memory`, `idea`, `task`, `goal`, `misc`, and `userSettings` — cover everything from factual recall to recurring task state to user preferences. The schema is flexible: unknown fields survive round-trip storage.
+
+**MCP tool surface.** The server exposes exactly seven tools: `write`, `read`, `query`, `search`, `update`, `delete`, and `raw_query`. These are generic, document-shaped operations — not domain-specific endpoints. Any agent or client that speaks MCP can connect to the same brain.
+
+**Embeddings and vector search.** `memory` and `idea` documents are embedded using Azure OpenAI's `text-embedding-3-large` model (3072 dimensions, cosine distance, diskANN index). The server generates embeddings internally — clients send text, never vectors. Semantic search is intentionally narrower than the full document store: tasks and goals are operational records handled through structured `query`, not vector search.
+
+**Authentication.** Both Cosmos DB and Azure OpenAI authenticate via `DefaultAzureCredential` — no API keys in the system. Locally this resolves to `az login`; in Azure it resolves to system-assigned managed identity.
+
+**Hosting.** The MCP server runs on Azure Container Apps with external HTTP ingress. It supports both `stdio` (local development) and `streamable-http` (hosted) transports.
+
+This two-system split is intentional for speed, cost, and time-to-production. It is not necessarily the final product shape.
+
+For the full implementation contract, see [DESIGN_SPEC.md](DESIGN_SPEC.md). For the full ownership table, see [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md).
+
+## Where It Is Going
+
+Because the data layer exposes a standard MCP interface, the agent runtime is replaceable. Possible future directions include:
+- consolidating into a single self-contained application that owns both data and agent runtime
+- swapping the agent runtime for a different framework or platform
+- adding new ingestion channels without changing the data layer
 
 ## Golden Rules
 
