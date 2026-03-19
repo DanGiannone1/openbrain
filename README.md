@@ -45,14 +45,13 @@ The current phase uses a two-system architecture:
 
 ```mermaid
 graph LR
-    User(("👤 User")) --> Channels["Telegram\n(+ future channels)"]
-    Channels --> OpenClaw["OpenClaw\nOrchestration Layer\n\nAgent Runtime\nScheduled Jobs\nTriage & Outreach"]
-    OpenClaw -->|"MCP Protocol"| OpenBrain["OpenBrain\nData Layer\n\nMCP Server\nDocument Storage\nVector Search"]
-    OpenBrain --> Azure[("Azure\n\nCosmos DB\nAzure OpenAI")]
+    User(("👤 User")) <--> Channels["Telegram\n(+ future channels)"]
+    Channels <--> OpenClaw["OpenClaw\nAgent Runtime\n\nTriage & Classification\nScheduled Jobs\nProactive Outreach"]
+    OpenClaw <-->|"MCP Protocol"| OpenBrain["OpenBrain\nData Layer\n\nCosmos DB\nAzure OpenAI\nContainer Apps"]
 ```
 
 - **OpenBrain** — the data layer. Stores, embeds, queries, and mutates documents. Handles deterministic behavior like recurring-task rollover. Does not make business decisions.
-- **OpenClaw** — the orchestration layer. Owns the user gateway (a Telegram bot today), agent runtime, scheduled jobs (daily briefing, nightly ping, heartbeat), triage decisions, and proactive outreach.
+- **OpenClaw** — the agent runtime. Owns the user gateway (a Telegram bot today), triage and classification, scheduled jobs (daily briefing, nightly ping, heartbeat), and proactive outreach.
 
 The flow is straightforward: the user interacts with OpenClaw, OpenClaw calls OpenBrain's MCP tools for storage and retrieval, and any durable state remains anchored in OpenBrain. OpenClaw is the execution surface; OpenBrain is the canonical data contract.
 
@@ -62,9 +61,9 @@ For the full ownership table and flow details, see [RUNTIME_ARCHITECTURE.md](RUN
 
 ## Where It Is Going
 
-Because the data layer exposes a standard MCP interface, the orchestration layer is replaceable. Possible future directions include:
+Because the data layer exposes a standard MCP interface, the agent runtime is replaceable. Possible future directions include:
 - consolidating into a single self-contained application that owns both data and agent runtime
-- swapping the orchestration layer for a different agent framework or platform
+- swapping the agent runtime for a different framework or platform
 - adding new ingestion channels without changing the data layer
 
 ## Conceptual Model
@@ -76,8 +75,8 @@ graph TB
     Input(("Raw Input")) --> Triage["Agent Triage\n(classify, deduplicate)"]
     Triage --> Semantic["Semantic Recall\nmemory · idea"]
     Triage --> Operational["Operational State\ntask · goal · misc"]
-    Semantic -->|"embedded"| VectorSearch["Vector Search"]
-    Operational --> StructuredQuery["Structured Query"]
+    Semantic <-->|"embedded"| VectorSearch["Vector Search"]
+    Operational <--> StructuredQuery["Structured Query"]
 ```
 
 Semantic recall:
